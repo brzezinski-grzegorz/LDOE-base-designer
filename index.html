@@ -12,16 +12,22 @@
         <!-- Left Panel -->
         <div class="left-panel">
             <h2 class="panel-title">Available Items</h2>
-            <div class="items-list" id="itemsList">
+            
+            <!-- Search Box -->
+            <div class="search-box">
+                <input type="text" id="itemsSearch" placeholder="🔍 Search items..." oninput="filterItems('items')">
+            </div>
+            
+            <div class="items-grid" id="itemsList">
                 <!-- Items will be loaded here -->
             </div>
             
             <!-- Grid Controls -->
             <div class="grid-controls-panel">
-                <h3 class="controls-title">Grid Controls</h3>
-                <button class="btn btn-block" onclick="saveGrid()">💾 Save Grid</button>
-                <button class="btn btn-block" onclick="loadGrid()">📂 Load Grid</button>
-                <button class="btn btn-danger btn-block" onclick="clearGridAndDatabase()">🗑️ Clear Grid</button>
+                <h3 class="controls-title">Layout Controls</h3>
+                <button class="btn btn-block" onclick="saveGrid()">💾 Save Layout</button>
+                <button class="btn btn-block" onclick="loadGrid()">📂 Load Layout</button>
+                <button class="btn btn-danger btn-block" onclick="clearGridAndDatabase()">🗑️ Clear Layout</button>
             </div>
         </div>
 
@@ -37,45 +43,15 @@
         <!-- Right Panel -->
         <div class="right-panel">
             <h2 class="panel-title">Build Tools</h2>
-            <div class="collapsible-container">
-                <!-- Tiles Section -->
-                <div class="collapsible-section">
-                    <div class="collapsible-header active">
-                        <h3>Tiles</h3>
-                        <div class="collapsible-icon">▼</div>
-                    </div>
-                    <div class="collapsible-content show" id="tilesContent">
-                        <div class="items-list" id="tilesList">
-                            <!-- Tiles will be loaded here -->
-                        </div>
-                    </div>
-                </div>
-                
-                <!-- Storage Section -->
-                <div class="collapsible-section">
-                    <div class="collapsible-header">
-                        <h3>Storage</h3>
-                        <div class="collapsible-icon">►</div>
-                    </div>
-                    <div class="collapsible-content" id="storageContent">
-                        <div class="items-list" id="storageList">
-                            <!-- Storage items will be loaded here -->
-                        </div>
-                    </div>
-                </div>
-                
-                <!-- Decorations Section -->
-                <div class="collapsible-section">
-                    <div class="collapsible-header">
-                        <h3>Decorations</h3>
-                        <div class="collapsible-icon">►</div>
-                    </div>
-                    <div class="collapsible-content" id="decorationsContent">
-                        <div class="items-list" id="decorationsList">
-                            <!-- Decorations will be loaded here -->
-                        </div>
-                    </div>
-                </div>
+            
+            <!-- Search Box -->
+            <div class="search-box">
+                <input type="text" id="toolsSearch" placeholder="🔍 Search tools..." oninput="filterItems('tools')">
+            </div>
+            
+            <!-- All items in one grid (no collapsible sections) -->
+            <div class="items-grid" id="toolsList">
+                <!-- Tiles, Storage, and Decorations will be loaded here -->
             </div>
         </div>
     </div>
@@ -119,6 +95,15 @@
                     cell.dataset.x = x;
                     cell.dataset.y = y;
                     
+                    // Mark border cells (first/last row/column) as non-placeable
+                    const isBorderCell = x === 0 || x === GRID_SIZE - 1 || y === 0 || y === GRID_SIZE - 1;
+                    if (isBorderCell) {
+                        cell.classList.add('border-cell');
+                        grid[y][x] = { occupied: true, itemId: null, itemType: 'border' };
+                    } else {
+                        grid[y][x] = { occupied: false, itemId: null, itemType: null };
+                    }
+                    
                     // Add drop events (keep for backward compatibility)
                     cell.addEventListener('dragover', handleDragOver);
                     cell.addEventListener('drop', handleDrop);
@@ -135,7 +120,6 @@
                     });
                     
                     gridElement.appendChild(cell);
-                    grid[y][x] = { occupied: false, itemId: null, itemType: null };
                 }
             }
             
@@ -280,17 +264,16 @@
 
             itemsDatabase.forEach(item => {
                 const itemElement = document.createElement('div');
-                itemElement.className = 'draggable-item';
+                itemElement.className = 'draggable-item compact';
                 itemElement.draggable = true;
                 itemElement.dataset.itemId = item.id;
-                itemElement.dataset.itemType = 'item'; // Explicitly set item type
+                itemElement.dataset.itemType = 'item';
+                itemElement.dataset.itemName = item.name.toLowerCase(); // For search filtering
                 
                 itemElement.innerHTML = `
-                    <div class="item-icon">${item.icon}</div>
-                    <div class="item-info">
-                        <div class="item-name">${item.name}</div>
-                        <div class="item-size">${item.width}x${item.height} • Qty: ${item.quantity}</div>
-                    </div>
+                    <div class="item-name-top">${item.name}</div>
+                    <div class="item-icon-large">${item.icon}</div>
+                    <div class="item-size-bottom">${item.width}×${item.height}</div>
                 `;
 
                 // Click-to-place handler
@@ -543,6 +526,12 @@
             for (let dy = 0; dy < height; dy++) {
                 for (let dx = 0; dx < width; dx++) {
                     const cell = grid[y + dy][x + dx];
+                    
+                    // Cannot place on border cells
+                    if (cell.itemType === 'border') {
+                        console.log(`✗ Cell [${x+dx},${y+dy}] is a border cell (non-placeable)`);
+                        return false;
+                    }
                     
                     // Tiles are background only - allow items, storage, decorations to be placed on them
                     if (cell.occupied && cell.itemType !== 'tile') {
@@ -908,33 +897,10 @@
                     loadItemsList();
                 } else {
                     // If database is not available, use fallback data
-                    console.warn('Invalid items data, using fallback data');
-                    itemsDatabase = [
-                        { id: 1, name: "Sword", icon: "⚔️", width: 1, height: 2, quantity: 5, type: "Weapon", damage: 25 },
-                        { id: 2, name: "Shield", icon: "🛡️", width: 2, height: 2, quantity: 3, type: "Armor", defense: 20 },
-                        { id: 3, name: "Potion", icon: "🧪", width: 1, height: 1, quantity: 10, type: "Consumable", healing: 50 },
-                        { id: 4, name: "Helmet", icon: "🪖", width: 2, height: 2, quantity: 2, type: "Armor", defense: 15 },
-                        { id: 5, name: "Bow", icon: "🏹", width: 1, height: 3, quantity: 4, type: "Weapon", damage: 18 },
-                        { id: 6, name: "Magic Staff", icon: "🔮", width: 1, height: 3, quantity: 1, type: "Weapon", damage: 30 },
-                        { id: 7, name: "Boots", icon: "🥾", width: 2, height: 1, quantity: 6, type: "Armor", defense: 8 },
-                        { id: 8, name: "Ring", icon: "💍", width: 1, height: 1, quantity: 8, type: "Accessory", bonus: "+5 Magic" }
-                    ];
-                    loadItemsList();
+                    console.warn('Invalid items data.');
                 }
             } catch (error) {
-                console.error('Error loading items:', error);
-                // Use fallback data if database fails
-                itemsDatabase = [
-                    { id: 1, name: "Sword", icon: "⚔️", width: 1, height: 2, quantity: 5, type: "Weapon", damage: 25 },
-                    { id: 2, name: "Shield", icon: "🛡️", width: 2, height: 2, quantity: 3, type: "Armor", defense: 20 },
-                    { id: 3, name: "Potion", icon: "🧪", width: 1, height: 1, quantity: 10, type: "Consumable", healing: 50 },
-                    { id: 4, name: "Helmet", icon: "🪖", width: 2, height: 2, quantity: 2, type: "Armor", defense: 15 },
-                    { id: 5, name: "Bow", icon: "🏹", width: 1, height: 3, quantity: 4, type: "Weapon", damage: 18 },
-                    { id: 6, name: "Magic Staff", icon: "🔮", width: 1, height: 3, quantity: 1, type: "Weapon", damage: 30 },
-                    { id: 7, name: "Boots", icon: "🥾", width: 2, height: 1, quantity: 6, type: "Armor", defense: 8 },
-                    { id: 8, name: "Ring", icon: "💍", width: 1, height: 1, quantity: 8, type: "Accessory", bonus: "+5 Magic" }
-                ];
-                loadItemsList();
+                console.error('Error loading items.', error);
             }
         }
 
@@ -950,30 +916,13 @@
                 if (Array.isArray(data)) {
                     tilesDatabase = data;
                     console.log('Tiles loaded:', tilesDatabase.length);
-                    loadTilesList();
+                    checkAndLoadTools();
                 } else {
                     // If database is not available, use fallback data
-                    console.warn('Invalid tiles data, using fallback data');
-                    tilesDatabase = [
-                        { id: 1, name: 'Grass', image: '🌿', width: 1, height: 1 },
-                        { id: 2, name: 'Stone', image: '🪨', width: 1, height: 1 },
-                        { id: 3, name: 'Wood', image: '🪵', width: 1, height: 1 },
-                        { id: 4, name: 'Dirt', image: '🟫', width: 1, height: 1 },
-                        { id: 5, name: 'Water', image: '💧', width: 1, height: 1 }
-                    ];
-                    loadTilesList();
+                    console.warn('Invalid tiles data.');
                 }
             } catch (error) {
-                console.error('Error loading tiles:', error);
-                // Use fallback data if database fails
-                tilesDatabase = [
-                    { id: 1, name: 'Grass', image: '🌿', width: 1, height: 1 },
-                    { id: 2, name: 'Stone', image: '🪨', width: 1, height: 1 },
-                    { id: 3, name: 'Wood', image: '🪵', width: 1, height: 1 },
-                    { id: 4, name: 'Dirt', image: '🟫', width: 1, height: 1 },
-                    { id: 5, name: 'Water', image: '💧', width: 1, height: 1 }
-                ];
-                loadTilesList();
+                console.error('Error loading tiles.', error);
             }
         }
 
@@ -987,30 +936,20 @@
                 
                 // Ensure we have a valid array
                 if (Array.isArray(data)) {
+                    // Calculate width and height for each storage item
+                    data.forEach(storage => {
+                        storage.width = Math.ceil(Math.sqrt(storage.tiles_needed));
+                        storage.height = Math.ceil(storage.tiles_needed / storage.width);
+                    });
                     storageDatabase = data;
                     console.log('Storage items loaded:', storageDatabase.length);
-                    loadStorageList();
+                    checkAndLoadTools();
                 } else {
                     // If database is not available, use fallback data
-                    console.warn('Invalid storage data, using fallback data');
-                    storageDatabase = [
-                        { id: 1, name: 'Small Chest', slots: 3, items_per_slot: 20, tiles_needed: 1 },
-                        { id: 2, name: 'Medium Chest', slots: 6, items_per_slot: 20, tiles_needed: 2 },
-                        { id: 3, name: 'Large Chest', slots: 9, items_per_slot: 30, tiles_needed: 4 },
-                        { id: 4, name: 'Storage Rack', slots: 12, items_per_slot: 40, tiles_needed: 6 }
-                    ];
-                    loadStorageList();
+                    console.warn('Invalid storage data.');
                 }
             } catch (error) {
-                console.error('Error loading storage items:', error);
-                // Use fallback data if database fails
-                storageDatabase = [
-                    { id: 1, name: 'Small Chest', slots: 3, items_per_slot: 20, tiles_needed: 1 },
-                    { id: 2, name: 'Medium Chest', slots: 6, items_per_slot: 20, tiles_needed: 2 },
-                    { id: 3, name: 'Large Chest', slots: 9, items_per_slot: 30, tiles_needed: 4 },
-                    { id: 4, name: 'Storage Rack', slots: 12, items_per_slot: 40, tiles_needed: 6 }
-                ];
-                loadStorageList();
+                console.error('Error loading storage items.', error);
             }
         }
 
@@ -1026,32 +965,100 @@
                 if (Array.isArray(data)) {
                     decorationsDatabase = data;
                     console.log('Decorations loaded:', decorationsDatabase.length);
-                    loadDecorationsList();
+                    checkAndLoadTools();
                 } else {
                     // If database is not available, use fallback data
-                    console.warn('Invalid decorations data, using fallback data');
-                    decorationsDatabase = [
-                        { id: 1, name: 'Flower', image: '🌸', width: 1, height: 1 },
-                        { id: 2, name: 'Tree', image: '🌳', width: 2, height: 2 },
-                        { id: 3, name: 'Rock', image: '🪨', width: 1, height: 1 },
-                        { id: 4, name: 'Fence', image: '🧱', width: 3, height: 1 }
-                    ];
-                    loadDecorationsList();
+                    console.warn('Invalid decorations data.');
                 }
             } catch (error) {
-                console.error('Error loading decorations:', error);
-                // Use fallback data if database fails
-                decorationsDatabase = [
-                    { id: 1, name: 'Flower', image: '🌸', width: 1, height: 1 },
-                    { id: 2, name: 'Tree', image: '🌳', width: 2, height: 2 },
-                    { id: 3, name: 'Rock', image: '🪨', width: 1, height: 1 },
-                    { id: 4, name: 'Fence', image: '🧱', width: 3, height: 1 }
-                ];
-                loadDecorationsList();
+                console.error('Error loading decorations.', error);
             }
         }
 
         // Load tiles into tiles panel
+        // Load all tools (tiles, storage, decorations) into right panel
+        function loadToolsList() {
+            const toolsList = document.getElementById('toolsList');
+            toolsList.innerHTML = '';
+
+            // Load tiles
+            tilesDatabase.forEach(tile => {
+                const tileElement = document.createElement('div');
+                tileElement.className = 'draggable-item compact tile-item';
+                tileElement.draggable = true;
+                tileElement.dataset.itemType = 'tile';
+                tileElement.dataset.itemId = tile.id;
+                tileElement.dataset.itemName = tile.name.toLowerCase();
+                tileElement.dataset.category = 'tile';
+                
+                tileElement.innerHTML = `
+                    <div class="item-name-top">${tile.name}</div>
+                    <div class="item-icon-large">${tile.image}</div>
+                    <div class="item-size-bottom">${tile.width}×${tile.height}</div>
+                `;
+
+                tileElement.addEventListener('click', () => handleItemClick(tile, tileElement));
+                tileElement.addEventListener('dragstart', handleDragStart);
+                tileElement.addEventListener('dragend', handleDragEnd);
+                tileElement.addEventListener('mouseenter', (e) => showTooltipPreview(e, tile, 'tile'));
+                tileElement.addEventListener('mouseleave', hideTooltip);
+                
+                toolsList.appendChild(tileElement);
+            });
+
+            // Load storage
+            storageDatabase.forEach(storage => {
+                const storageElement = document.createElement('div');
+                storageElement.className = 'draggable-item compact storage-item';
+                storageElement.draggable = true;
+                storageElement.dataset.itemType = 'storage';
+                storageElement.dataset.itemId = storage.id;
+                storageElement.dataset.itemName = storage.name.toLowerCase();
+                storageElement.dataset.category = 'storage';
+                
+                storageElement.innerHTML = `
+                    <div class="item-name-top">${storage.name}</div>
+                    <div class="item-icon-large">📦</div>
+                    <div class="item-size-bottom">${storage.tiles_needed} tiles</div>
+                `;
+
+                storageElement.addEventListener('click', () => handleItemClick(storage, storageElement));
+                storageElement.addEventListener('dragstart', handleDragStart);
+                storageElement.addEventListener('dragend', handleDragEnd);
+                storageElement.addEventListener('mouseenter', (e) => showTooltipPreview(e, storage, 'storage'));
+                storageElement.addEventListener('mouseleave', hideTooltip);
+                
+                toolsList.appendChild(storageElement);
+            });
+
+            // Load decorations
+            decorationsDatabase.forEach(decoration => {
+                const decorationElement = document.createElement('div');
+                decorationElement.className = 'draggable-item compact decoration-item';
+                decorationElement.draggable = true;
+                decorationElement.dataset.itemType = 'decoration';
+                decorationElement.dataset.itemId = decoration.id;
+                decorationElement.dataset.itemName = decoration.name.toLowerCase();
+                decorationElement.dataset.category = 'decoration';
+                
+                decorationElement.innerHTML = `
+                    <div class="item-name-top">${decoration.name}</div>
+                    <div class="item-icon-large">${decoration.image}</div>
+                    <div class="item-size-bottom">${decoration.width}×${decoration.height}</div>
+                `;
+
+                decorationElement.addEventListener('click', () => handleItemClick(decoration, decorationElement));
+                decorationElement.addEventListener('dragstart', handleDragStart);
+                decorationElement.addEventListener('dragend', handleDragEnd);
+                decorationElement.addEventListener('mouseenter', (e) => showTooltipPreview(e, decoration, 'decoration'));
+                decorationElement.addEventListener('mouseleave', hideTooltip);
+                
+                toolsList.appendChild(decorationElement);
+            });
+            
+            console.log('Tools loaded:', tilesDatabase.length + storageDatabase.length + decorationsDatabase.length);
+        }
+
         function loadTilesList() {
             const tilesList = document.getElementById('tilesList');
             tilesList.innerHTML = '';
@@ -1149,6 +1156,43 @@
                 
                 decorationsList.appendChild(decorationElement);
             });
+        }
+
+        // Filter items based on search input
+        function filterItems(panelType) {
+            const searchInput = panelType === 'items' 
+                ? document.getElementById('itemsSearch').value.toLowerCase()
+                : document.getElementById('toolsSearch').value.toLowerCase();
+            
+            const container = panelType === 'items'
+                ? document.getElementById('itemsList')
+                : document.getElementById('toolsList');
+            
+            const items = container.querySelectorAll('.draggable-item');
+            
+            items.forEach(item => {
+                const itemName = item.dataset.itemName || '';
+                const category = item.dataset.category || '';
+                const searchText = itemName + ' ' + category;
+                
+                if (searchText.includes(searchInput)) {
+                    item.style.display = '';
+                } else {
+                    item.style.display = 'none';
+                }
+            });
+        }
+
+        // Check if all databases loaded, then load tools
+        let toolsLoadAttempts = 0;
+        function checkAndLoadTools() {
+            toolsLoadAttempts++;
+            if (tilesDatabase.length > 0 && storageDatabase.length > 0 && decorationsDatabase.length > 0) {
+                loadToolsList();
+            } else if (toolsLoadAttempts >= 3) {
+                // All three databases should have tried loading by now
+                loadToolsList(); // Load whatever we have
+            }
         }
 
         // Setup collapsible sections functionality
