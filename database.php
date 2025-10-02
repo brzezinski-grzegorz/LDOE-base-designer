@@ -47,11 +47,18 @@ $sql = "CREATE TABLE IF NOT EXISTS tiles (
     name VARCHAR(100) NOT NULL,
     image VARCHAR(255) NOT NULL,
     width INT(11) NOT NULL DEFAULT 1,
-    height INT(11) NOT NULL DEFAULT 1
+    height INT(11) NOT NULL DEFAULT 1,
+    color VARCHAR(7) DEFAULT '#CCCCCC'
 )";
 
 if ($conn->query($sql) !== TRUE) {
     die("Error creating tiles table: " . $conn->error);
+}
+
+// Check if color column exists, if not add it (for existing databases)
+$checkColumn = $conn->query("SHOW COLUMNS FROM tiles LIKE 'color'");
+if ($checkColumn->num_rows === 0) {
+    $conn->query("ALTER TABLE tiles ADD COLUMN color VARCHAR(7) DEFAULT '#CCCCCC'");
 }
 
 // Create storage table
@@ -214,6 +221,4 @@ if ($row['count'] == 0) {
     $stmt->close();
 }
 
-// Close connection
-$conn->close();
 ?>

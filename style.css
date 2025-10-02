@@ -135,32 +135,51 @@ body {
 /* Compact square card style */
 .draggable-item.compact {
     flex-direction: column;
-    padding: 6px;
+    padding: 4px;
     text-align: center;
-    aspect-ratio: 1;
-    justify-content: space-between;
-    border-radius: 8px;
+    width: 120px; /* fixed compact width */
+    height: 120px; /* fixed compact height */
+    justify-content: center; /* center content vertically */
+    align-items: center; /* center content horizontally */
+    border-radius: 6px;
 }
 
 .item-name-top {
-    font-size: 14px;
-    font-weight: 600;
+    font-size: 12px;
     text-overflow: ellipsis;
-    overflow: hidden;
     white-space: nowrap;
     width: 100%;
-    line-height: 1.2;
+    line-height: 1.1;
+    margin-bottom: 4px; /* small gap */
+    height: 12px; /* reserve small space for name */
 }
 
 .item-icon-large {
-    font-size: 48px;
+    font-size: 32px;
     line-height: 1;
+    width: 100%;
+    height: 28px; /* room for a small image */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.item-icon-large img {
+    max-width: 32px;
+    max-height: 32px;
+    width: auto;
+    height: auto;
+    object-fit: cover;
+    border-radius: 6px;
+    display: block;
 }
 
 .item-size-bottom {
     font-size: 12px;
     opacity: 0.9;
     font-weight: 500;
+    margin-top: 6px; /* small gap above size text */
+    display: none; /* hide size to keep card compact */
 }
 
 .draggable-item:hover {
@@ -396,6 +415,15 @@ body {
     font-size: 48px;
     filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5));
     text-shadow: 0 2px 4px rgba(0, 0, 0, 0.8);
+}
+
+/* Support for image elements inside placed items */
+.placed-item-icon-only img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 8px;
+    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5));
 }
 
 /* Smaller icons for smaller items */
@@ -653,6 +681,18 @@ body {
 .compact-icon {
     font-size: 24px;
     line-height: 1;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.compact-icon img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 6px;
 }
 
 .compact-size {

@@ -1,4 +1,11 @@
 <?php
+// Suppress all errors to ensure clean JSON output
+error_reporting(0);
+ini_set('display_errors', 0);
+
+// Set header for JSON response FIRST (before any output)
+header('Content-Type: application/json');
+
 // Database connection parameters
 $servername = "localhost";
 $username = "root";
@@ -10,11 +17,16 @@ $conn = new mysqli($servername, $username, $password, $dbname);
 
 // Check connection
 if ($conn->connect_error) {
-    die("Connection failed: " . $conn->connect_error);
+    echo json_encode(['error' => 'Connection failed', 'message' => $conn->connect_error]);
+    exit;
 }
 
-// Set header for JSON response
-header('Content-Type: application/json');
+// Check if database exists
+$result = $conn->select_db($dbname);
+if (!$result) {
+    echo json_encode(['error' => 'Database does not exist', 'message' => 'Please run setup_database.php first']);
+    exit;
+}
 
 // Get the table type from request
 $type = isset($_GET['type']) ? $_GET['type'] : 'tiles';
@@ -23,7 +35,7 @@ $response = [];
 
 switch ($type) {
     case 'tiles':
-        $sql = "SELECT id, name, image, width, height FROM tiles";
+        $sql = "SELECT id, name, image, width, height, color FROM tiles";
         break;
     case 'storage':
         $sql = "SELECT id, name, slots, items_per_slot, tiles_needed FROM storage";
@@ -36,9 +48,17 @@ switch ($type) {
         $sql = "SELECT * FROM items";
         break;
     default:
-        $response = ['error' => 'Invalid type specified'];
-        echo json_encode($response);
+        echo json_encode(['error' => 'Invalid type specified']);
+        $conn->close();
         exit;
+}
+
+// Check if table exists before querying
+$tableCheck = $conn->query("SHOW TABLES LIKE '$type'");
+if ($tableCheck && $tableCheck->num_rows === 0) {
+    echo json_encode(['error' => 'Table does not exist', 'message' => 'Please run setup_database.php to create tables', 'table' => $type]);
+    $conn->close();
+    exit;
 }
 
 $result = $conn->query($sql);
@@ -50,7 +70,8 @@ if ($result) {
     }
     $response = $items;
 } else {
-    $response = ['error' => 'Failed to fetch data: ' . $conn->error];
+    // Return empty array instead of error to prevent breaking the UI
+    $response = [];
 }
 
 // Close connection

@@ -11,15 +11,16 @@
     <div class="container">
         <!-- Left Panel -->
         <div class="left-panel">
-            <h2 class="panel-title">Available Items</h2>
+            <h2 class="panel-title">Build Tools</h2>
             
             <!-- Search Box -->
             <div class="search-box">
-                <input type="text" id="itemsSearch" placeholder="🔍 Search items..." oninput="filterItems('items')">
+                <input type="text" id="toolsSearch" placeholder="🔍 Search tools..." oninput="filterItems('tools')">
             </div>
             
-            <div class="items-grid" id="itemsList">
-                <!-- Items will be loaded here -->
+            <!-- All tools in one grid -->
+            <div class="items-grid" id="toolsList">
+                <!-- Tiles, Storage, and Decorations will be loaded here -->
             </div>
             
             <!-- Grid Controls -->
@@ -42,16 +43,10 @@
 
         <!-- Right Panel -->
         <div class="right-panel">
-            <h2 class="panel-title">Build Tools</h2>
-            
-            <!-- Search Box -->
-            <div class="search-box">
-                <input type="text" id="toolsSearch" placeholder="🔍 Search tools..." oninput="filterItems('tools')">
-            </div>
-            
-            <!-- All items in one grid (no collapsible sections) -->
-            <div class="items-grid" id="toolsList">
-                <!-- Tiles, Storage, and Decorations will be loaded here -->
+            <h2 class="panel-title">Instructions</h2>
+            <div class="instructions-content">
+                <!-- Instructions will be added here later -->
+                <p style="color: #666; padding: 20px; text-align: center;">Instructions coming soon...</p>
             </div>
         </div>
     </div>
@@ -64,7 +59,6 @@
 
     <script>
         // All databases will be loaded from MySQL via PHP backend
-        let itemsDatabase = [];
         let tilesDatabase = [];
         let storageDatabase = [];
         let decorationsDatabase = [];
@@ -80,6 +74,17 @@
         // New: Click-to-place system
         let selectedItem = null; // Currently selected item for placement
         let selectedItemElement = null; // The UI element that was clicked
+
+        // Helper function to render image or emoji
+        function renderImageOrEmoji(imagePath, altText = '', className = 'item-icon-large') {
+            if (imagePath && imagePath.startsWith('uploads/')) {
+                // It's an uploaded image file
+                return `<img src="${imagePath}" alt="${altText}" class="${className}" style="width:70%;height:70%;object-fit:contain;border-radius:6px;">`;
+            } else {
+                // It's an emoji or text
+                return `<div class="${className}">${imagePath || '❓'}</div>`;
+            }
+        }
 
         // Initialize grid
         function initializeGrid() {
@@ -258,39 +263,6 @@
         }
 
         // Load items into left panel
-        function loadItemsList() {
-            const itemsList = document.getElementById('itemsList');
-            itemsList.innerHTML = '';
-
-            itemsDatabase.forEach(item => {
-                const itemElement = document.createElement('div');
-                itemElement.className = 'draggable-item compact';
-                itemElement.draggable = true;
-                itemElement.dataset.itemId = item.id;
-                itemElement.dataset.itemType = 'item';
-                itemElement.dataset.itemName = item.name.toLowerCase(); // For search filtering
-                
-                itemElement.innerHTML = `
-                    <div class="item-name-top">${item.name}</div>
-                    <div class="item-icon-large">${item.icon}</div>
-                    <div class="item-size-bottom">${item.width}×${item.height}</div>
-                `;
-
-                // Click-to-place handler
-                itemElement.addEventListener('click', () => handleItemClick(item, itemElement));
-                
-                // Keep drag-and-drop for backward compatibility
-                itemElement.addEventListener('dragstart', handleDragStart);
-                itemElement.addEventListener('dragend', handleDragEnd);
-                itemElement.addEventListener('mouseenter', (e) => showTooltipPreview(e, item, 'item'));
-                itemElement.addEventListener('mouseleave', hideTooltip);
-                
-                itemsList.appendChild(itemElement);
-            });
-            
-            console.log('Items loaded:', itemsDatabase.length);
-        }
-
         function handleDragEnd(e) {
             // Remove dragging class from the element
             if (e.target.classList.contains('dragging')) {
@@ -479,20 +451,32 @@
             ghostElement.className = 'ghost-item-compact';
             
             // Create a small compact ghost - just icon and size info
-            let icon = '';
+            let iconHTML = '';
             if (item.type === 'tile') {
-                icon = item.image || '🟩';
+                if (item.image && item.image.startsWith('uploads/')) {
+                    iconHTML = `<img src="${item.image}" alt="${item.name}" style="width:100%;height:100%;object-fit:cover;border-radius:6px;">`;
+                } else {
+                    iconHTML = item.image || '🟩';
+                }
             } else if (item.type === 'storage') {
-                icon = '📦';
+                iconHTML = '📦';
             } else if (item.type === 'decoration') {
-                icon = item.image || '🎨';
+                if (item.image && item.image.startsWith('uploads/')) {
+                    iconHTML = `<img src="${item.image}" alt="${item.name}" style="width:100%;height:100%;object-fit:cover;border-radius:6px;">`;
+                } else {
+                    iconHTML = item.image || '🎨';
+                }
             } else {
-                icon = item.icon || '📦';
+                if (item.icon && item.icon.startsWith('uploads/')) {
+                    iconHTML = `<img src="${item.icon}" alt="${item.name}" style="width:100%;height:100%;object-fit:cover;border-radius:6px;">`;
+                } else {
+                    iconHTML = item.icon || '📦';
+                }
             }
             
             ghostElement.innerHTML = `
                 <div class="compact-ghost-content">
-                    <div class="compact-icon">${icon}</div>
+                    <div class="compact-icon">${iconHTML}</div>
                     <div class="compact-size">${item.width}×${item.height}</div>
                 </div>
             `;
@@ -630,7 +614,7 @@
                             
                             // If we're showing a valid drop and it's a tile, show a preview
                             if (className === 'drop-hover' && draggedItem && draggedItem.type === 'tile') {
-                                cell.style.backgroundColor = getTileColor(draggedItem.name);
+                                cell.style.backgroundColor = draggedItem.color || getTileColor(draggedItem.name);
                                 if (draggedItem.image) {
                                     cell.innerHTML = `<div class="cell-content preview">${draggedItem.image}</div>`;
                                 }
@@ -882,47 +866,30 @@
         }
 
         // Load tiles, storage and decorations from database
-        async function loadItemsDatabase() {
-            try {
-                const response = await fetch('getItems.php?type=items');
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
-                const data = await response.json();
-                
-                // Ensure we have a valid array
-                if (Array.isArray(data)) {
-                    itemsDatabase = data;
-                    console.log('Items loaded from database:', itemsDatabase.length);
-                    loadItemsList();
-                } else {
-                    // If database is not available, use fallback data
-                    console.warn('Invalid items data.');
-                }
-            } catch (error) {
-                console.error('Error loading items.', error);
-            }
-        }
-
         async function loadTilesDatabase() {
             try {
                 const response = await fetch('getItems.php?type=tiles');
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
                 const data = await response.json();
+                
+                // Check for API errors
+                if (data.error) {
+                    console.error('⚠️ DATABASE ERROR:', data.message || data.error);
+                    if (data.message && data.message.includes('setup_database.php')) {
+                        console.error('📋 SOLUTION: Open http://localhost/LDOE-base-designer/setup_database.php in your browser');
+                    }
+                    return;
+                }
                 
                 // Ensure we have a valid array
                 if (Array.isArray(data)) {
                     tilesDatabase = data;
-                    console.log('Tiles loaded:', tilesDatabase.length);
+                    console.log('✓ Tiles loaded:', tilesDatabase.length);
                     checkAndLoadTools();
                 } else {
-                    // If database is not available, use fallback data
                     console.warn('Invalid tiles data.');
                 }
             } catch (error) {
-                console.error('Error loading tiles.', error);
+                console.error('Error loading tiles:', error);
             }
         }
 
@@ -993,7 +960,7 @@
                 
                 tileElement.innerHTML = `
                     <div class="item-name-top">${tile.name}</div>
-                    <div class="item-icon-large">${tile.image}</div>
+                    ${renderImageOrEmoji(tile.image, tile.name, 'item-icon-large')}
                     <div class="item-size-bottom">${tile.width}×${tile.height}</div>
                 `;
 
@@ -1043,7 +1010,7 @@
                 
                 decorationElement.innerHTML = `
                     <div class="item-name-top">${decoration.name}</div>
-                    <div class="item-icon-large">${decoration.image}</div>
+                    ${renderImageOrEmoji(decoration.image, decoration.name, 'item-icon-large')}
                     <div class="item-size-bottom">${decoration.width}×${decoration.height}</div>
                 `;
 
@@ -1160,14 +1127,8 @@
 
         // Filter items based on search input
         function filterItems(panelType) {
-            const searchInput = panelType === 'items' 
-                ? document.getElementById('itemsSearch').value.toLowerCase()
-                : document.getElementById('toolsSearch').value.toLowerCase();
-            
-            const container = panelType === 'items'
-                ? document.getElementById('itemsList')
-                : document.getElementById('toolsList');
-            
+            const searchInput = document.getElementById('toolsSearch').value.toLowerCase();
+            const container = document.getElementById('toolsList');
             const items = container.querySelectorAll('.draggable-item');
             
             items.forEach(item => {
@@ -1274,19 +1235,8 @@
                     return;
                 }
             } else {
-                // Original items
-                draggedItem = itemsDatabase.find(item => parseInt(item.id) === itemId);
-                if (draggedItem) {
-                    draggedItem = {...draggedItem}; // Clone to avoid modifying original
-                    draggedItem.type = 'item';
-                    draggedItem.id = parseInt(draggedItem.id);
-                    draggedItem.width = parseInt(draggedItem.width);
-                    draggedItem.height = parseInt(draggedItem.height);
-                    draggedItem.quantity = parseInt(draggedItem.quantity);
-                } else {
-                    console.error("Item not found with ID:", itemId);
-                    return;
-                }
+                console.error("Unknown item type:", itemType);
+                return;
             }
             
             console.log('Successfully found and set draggedItem:', draggedItem);
@@ -1335,7 +1285,7 @@
                 
                 const cell = document.querySelector(`.grid-cell[data-x="${x}"][data-y="${y}"]`);
                 cell.classList.add('occupied');
-                cell.style.backgroundColor = getTileColor(item.name);
+                cell.style.backgroundColor = item.color || getTileColor(item.name);
                 cell.setAttribute('data-tile-name', item.name);
                 // Don't add any text or overlay for tiles
                 cell.innerHTML = '';
@@ -1380,19 +1330,25 @@
             // Add a unique ID to help with tracking
             placedElement.id = `placed-${item.type}-${item.id}-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
             
-            // Only show icon, no text/name
-            let icon = '';
+            // Only show icon, no text/name - support both images and emoji
+            let iconHTML = '';
             if (item.type === 'storage') {
-                icon = '📦';
+                iconHTML = '<div class="placed-item-icon-only">📦</div>';
             } else if (item.type === 'decoration') {
-                icon = item.image || '🎨';
+                if (item.image && item.image.startsWith('uploads/')) {
+                    iconHTML = `<img src="${item.image}" alt="${item.name}" class="placed-item-icon-only" style="width:100%;height:100%;object-fit:cover;border-radius:8px;">`;
+                } else {
+                    iconHTML = `<div class="placed-item-icon-only">${item.image || '🎨'}</div>`;
+                }
             } else {
-                icon = item.icon || '📦';
+                if (item.icon && item.icon.startsWith('uploads/')) {
+                    iconHTML = `<img src="${item.icon}" alt="${item.name}" class="placed-item-icon-only" style="width:100%;height:100%;object-fit:cover;border-radius:8px;">`;
+                } else {
+                    iconHTML = `<div class="placed-item-icon-only">${item.icon || '📦'}</div>`;
+                }
             }
             
-            placedElement.innerHTML = `
-                <div class="placed-item-icon-only">${icon}</div>
-            `;
+            placedElement.innerHTML = iconHTML;
             
             // Add drag events
             placedElement.addEventListener('dragstart', handleDragStart);
@@ -1580,7 +1536,7 @@
             try {
                 // Wait a bit to ensure databases are loaded
                 if (tilesDatabase.length === 0 || storageDatabase.length === 0 || 
-                    decorationsDatabase.length === 0 || itemsDatabase.length === 0) {
+                    decorationsDatabase.length === 0) {
                     console.log('Databases not fully loaded yet, waiting...');
                     setTimeout(() => loadGrid(), 500);
                     return;
@@ -1639,12 +1595,6 @@
                                 item = {...item}; // Clone the item
                                 item.type = 'decoration';
                             }
-                        } else if (savedItem.item_type === 'item') {
-                            item = itemsDatabase.find(i => i.id === parseInt(savedItem.item_id));
-                            if (item) {
-                                item = {...item}; // Clone the item
-                                item.type = 'item';
-                            }
                         }
                         
                         if (item) {
@@ -1700,7 +1650,6 @@
             initializeGrid();
             
             // Load all databases
-            loadItemsDatabase();
             loadTilesDatabase();
             loadStorageDatabase();
             loadDecorationsDatabase();
