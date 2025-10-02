@@ -38,10 +38,10 @@ switch ($type) {
         $sql = "SELECT id, name, image, width, height, color FROM tiles";
         break;
     case 'storage':
-        $sql = "SELECT id, name, slots, items_per_slot, tiles_needed FROM storage";
+        $sql = "SELECT id, name, image, slots, items_per_slot, tiles_needed, color FROM storage";
         break;
     case 'decorations':
-        $sql = "SELECT id, name, image, width, height FROM decorations";
+        $sql = "SELECT id, name, image, width, height, color FROM decorations";
         break;
     case 'items':
         // Keep backward compatibility for original items

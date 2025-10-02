@@ -65,13 +65,27 @@ if ($checkColumn->num_rows === 0) {
 $sql = "CREATE TABLE IF NOT EXISTS storage (
     id INT(11) AUTO_INCREMENT PRIMARY KEY,
     name VARCHAR(100) NOT NULL,
+    image VARCHAR(255) NOT NULL DEFAULT '📦',
     slots INT(11) NOT NULL,
     items_per_slot INT(11) NOT NULL,
-    tiles_needed INT(11) NOT NULL
+    tiles_needed INT(11) NOT NULL,
+    color VARCHAR(7) DEFAULT '#CCCCCC'
 )";
 
 if ($conn->query($sql) !== TRUE) {
     die("Error creating storage table: " . $conn->error);
+}
+
+// Check if image column exists in storage, if not add it (for existing databases)
+$checkColumn = $conn->query("SHOW COLUMNS FROM storage LIKE 'image'");
+if ($checkColumn->num_rows === 0) {
+    $conn->query("ALTER TABLE storage ADD COLUMN image VARCHAR(255) NOT NULL DEFAULT '📦' AFTER name");
+}
+
+// Check if color column exists in storage, if not add it (for existing databases)
+$checkColumn = $conn->query("SHOW COLUMNS FROM storage LIKE 'color'");
+if ($checkColumn->num_rows === 0) {
+    $conn->query("ALTER TABLE storage ADD COLUMN color VARCHAR(7) DEFAULT '#CCCCCC'");
 }
 
 // Create decorations table
@@ -80,11 +94,18 @@ $sql = "CREATE TABLE IF NOT EXISTS decorations (
     name VARCHAR(100) NOT NULL,
     image VARCHAR(255) NOT NULL,
     width INT(11) NOT NULL DEFAULT 1,
-    height INT(11) NOT NULL DEFAULT 1
+    height INT(11) NOT NULL DEFAULT 1,
+    color VARCHAR(7) DEFAULT '#CCCCCC'
 )";
 
 if ($conn->query($sql) !== TRUE) {
     die("Error creating decorations table: " . $conn->error);
+}
+
+// Check if color column exists in decorations, if not add it (for existing databases)
+$checkColumn = $conn->query("SHOW COLUMNS FROM decorations LIKE 'color'");
+if ($checkColumn->num_rows === 0) {
+    $conn->query("ALTER TABLE decorations ADD COLUMN color VARCHAR(7) DEFAULT '#CCCCCC'");
 }
 
 // Create grid_items table for saving grid layouts

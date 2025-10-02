@@ -459,7 +459,11 @@
                     iconHTML = item.image || '🟩';
                 }
             } else if (item.type === 'storage') {
-                iconHTML = '📦';
+                if (item.image && item.image.startsWith('uploads/')) {
+                    iconHTML = `<img src="${item.image}" alt="${item.name}" style="width:100%;height:100%;object-fit:cover;border-radius:6px;">`;
+                } else {
+                    iconHTML = item.image || '📦';
+                }
             } else if (item.type === 'decoration') {
                 if (item.image && item.image.startsWith('uploads/')) {
                     iconHTML = `<img src="${item.image}" alt="${item.name}" style="width:100%;height:100%;object-fit:cover;border-radius:6px;">`;
@@ -985,7 +989,7 @@
                 
                 storageElement.innerHTML = `
                     <div class="item-name-top">${storage.name}</div>
-                    <div class="item-icon-large">📦</div>
+                    ${renderImageOrEmoji(storage.image, storage.name, 'item-icon-large')}
                     <div class="item-size-bottom">${storage.tiles_needed} tiles</div>
                 `;
 
@@ -1327,13 +1331,20 @@
             placedElement.dataset.itemId = item.id;
             placedElement.dataset.itemType = item.type;
             
+            // Storage and Decorations are fully transparent - no background, only image visible
+            // This allows tiles underneath to show through perfectly
+            
             // Add a unique ID to help with tracking
             placedElement.id = `placed-${item.type}-${item.id}-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
             
             // Only show icon, no text/name - support both images and emoji
             let iconHTML = '';
             if (item.type === 'storage') {
-                iconHTML = '<div class="placed-item-icon-only">📦</div>';
+                if (item.image && item.image.startsWith('uploads/')) {
+                    iconHTML = `<img src="${item.image}" alt="${item.name}" class="placed-item-icon-only" style="width:100%;height:100%;object-fit:cover;border-radius:8px;">`;
+                } else {
+                    iconHTML = `<div class="placed-item-icon-only">${item.image || '📦'}</div>`;
+                }
             } else if (item.type === 'decoration') {
                 if (item.image && item.image.startsWith('uploads/')) {
                     iconHTML = `<img src="${item.image}" alt="${item.name}" class="placed-item-icon-only" style="width:100%;height:100%;object-fit:cover;border-radius:8px;">`;

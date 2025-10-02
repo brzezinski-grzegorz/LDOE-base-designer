@@ -616,29 +616,30 @@ body {
     z-index: 5;
 }
 
-/* Item Type Specific Styles */
+/* Item Type Specific Styles - Unified gradient for all items in Build Tools panel */
 .tile-item {
-    background: linear-gradient(135deg, #38A169 0%, #2F855A 100%);
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
 }
 
 .storage-item {
-    background: linear-gradient(135deg, #DD6B20 0%, #C05621 100%);
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
 }
 
 .decoration-item {
-    background: linear-gradient(135deg, #3182CE 0%, #2B6CB0 100%);
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
 }
 
+/* Placed items on grid - fully transparent for storage and decorations */
 .placed-tile {
-    background: linear-gradient(135deg, #38A169 0%, #2F855A 100%);
+    background: transparent;
 }
 
 .placed-storage {
-    background: linear-gradient(135deg, #DD6B20 0%, #C05621 100%);
+    background: transparent;
 }
 
 .placed-decoration {
-    background: linear-gradient(135deg, #3182CE 0%, #2B6CB0 100%);
+    background: transparent;
 }
 
 .placed-item-info {
