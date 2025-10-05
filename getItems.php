@@ -43,6 +43,15 @@ switch ($type) {
     case 'decorations':
         $sql = "SELECT id, name, image, width, height, color FROM decorations";
         break;
+    case 'workbench':
+        $sql = "SELECT id, name, image, tiles_needed FROM workbench";
+        break;
+    case 'furniture':
+        $sql = "SELECT id, name, image, tiles_needed FROM furniture";
+        break;
+    case 'special':
+        $sql = "SELECT id, name, image, tiles_needed FROM special";
+        break;
     case 'items':
         // Keep backward compatibility for original items
         $sql = "SELECT * FROM items";

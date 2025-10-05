@@ -108,6 +108,42 @@ if ($checkColumn->num_rows === 0) {
     $conn->query("ALTER TABLE decorations ADD COLUMN color VARCHAR(7) DEFAULT '#CCCCCC'");
 }
 
+// Create workbench table
+$sql = "CREATE TABLE IF NOT EXISTS workbench (
+    id INT(11) AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    image VARCHAR(255) NOT NULL,
+    tiles_needed INT(11) NOT NULL DEFAULT 1
+)";
+
+if ($conn->query($sql) !== TRUE) {
+    die("Error creating workbench table: " . $conn->error);
+}
+
+// Create furniture table
+$sql = "CREATE TABLE IF NOT EXISTS furniture (
+    id INT(11) AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    image VARCHAR(255) NOT NULL,
+    tiles_needed INT(11) NOT NULL DEFAULT 1
+)";
+
+if ($conn->query($sql) !== TRUE) {
+    die("Error creating furniture table: " . $conn->error);
+}
+
+// Create special table
+$sql = "CREATE TABLE IF NOT EXISTS special (
+    id INT(11) AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    image VARCHAR(255) NOT NULL,
+    tiles_needed INT(11) NOT NULL DEFAULT 1
+)";
+
+if ($conn->query($sql) !== TRUE) {
+    die("Error creating special table: " . $conn->error);
+}
+
 // Create grid_items table for saving grid layouts
 $sql = "CREATE TABLE IF NOT EXISTS grid_items (
     id INT(11) AUTO_INCREMENT PRIMARY KEY,

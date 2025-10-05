@@ -40,31 +40,35 @@
         <div class="right-panel">
             <h2 class="panel-title">Storage & Decorations</h2>
             <div class="instructions-content" id="rightTools">
+                <!-- Tabs for different categories -->
+                <div class="right-tabs">
+                    <button class="right-tab active" data-tab="storage">📦 Storage</button>
+                    <button class="right-tab" data-tab="decorations">🌸 Decorations</button>
+                    <button class="right-tab" data-tab="workbench">🔨 Workbench</button>
+                    <button class="right-tab" data-tab="furniture">🪑 Furniture</button>
+                    <button class="right-tab" data-tab="special">⭐ Special</button>
+                </div>
+                
                 <!-- Search box for right panel -->
                 <div class="search-box" style="margin-bottom:10px;">
-                    <input type="text" id="rightSearch" placeholder="🔍 Search storage & decorations..." oninput="filterRightItems()">
+                    <input type="text" id="rightSearch" placeholder="🔍 Search items..." oninput="filterRightItems()">
                 </div>
 
-                <!-- Storage collapsible section -->
-                <div class="collapsible-section">
-                    <div class="collapsible-header">
-                        <span class="collapsible-icon">▼</span>
-                        <strong style="margin-left:8px">Storage</strong>
-                    </div>
-                    <div class="collapsible-content show">
-                        <div class="items-grid" id="storageList"></div>
-                    </div>
+                <!-- Tab content containers -->
+                <div class="tab-content active" id="tab-storage">
+                    <div class="items-grid" id="storageGrid"></div>
                 </div>
-
-                <!-- Decorations collapsible section -->
-                <div class="collapsible-section">
-                    <div class="collapsible-header">
-                        <span class="collapsible-icon">▼</span>
-                        <strong style="margin-left:8px">Decorations</strong>
-                    </div>
-                    <div class="collapsible-content show">
-                        <div class="items-grid" id="decorationsList"></div>
-                    </div>
+                <div class="tab-content" id="tab-decorations">
+                    <div class="items-grid" id="decorationsGrid"></div>
+                </div>
+                <div class="tab-content" id="tab-workbench">
+                    <div class="items-grid" id="workbenchGrid"></div>
+                </div>
+                <div class="tab-content" id="tab-furniture">
+                    <div class="items-grid" id="furnitureGrid"></div>
+                </div>
+                <div class="tab-content" id="tab-special">
+                    <div class="items-grid" id="specialGrid"></div>
                 </div>
             </div>
         </div>
@@ -88,6 +92,9 @@
         let tilesDatabase = [];
         let storageDatabase = [];
         let decorationsDatabase = [];
+        let workbenchDatabase = [];
+        let furnitureDatabase = [];
+        let specialDatabase = [];
 
         const GRID_SIZE = 20;
         let grid = [];
@@ -880,6 +887,48 @@
                         <span>Click to select & place</span>
                     </div>
                 `;
+            } else if (itemType === 'workbench') {
+                infoHTML = `
+                    <div class="tooltip-row">
+                        <span>Type:</span>
+                        <span>Workbench</span>
+                    </div>
+                    <div class="tooltip-row">
+                        <span>Tiles needed:</span>
+                        <span>${item.tiles_needed}</span>
+                    </div>
+                    <div class="tooltip-row">
+                        <span>Click to select & place</span>
+                    </div>
+                `;
+            } else if (itemType === 'furniture') {
+                infoHTML = `
+                    <div class="tooltip-row">
+                        <span>Type:</span>
+                        <span>Furniture</span>
+                    </div>
+                    <div class="tooltip-row">
+                        <span>Tiles needed:</span>
+                        <span>${item.tiles_needed}</span>
+                    </div>
+                    <div class="tooltip-row">
+                        <span>Click to select & place</span>
+                    </div>
+                `;
+            } else if (itemType === 'special') {
+                infoHTML = `
+                    <div class="tooltip-row">
+                        <span>Type:</span>
+                        <span>Special</span>
+                    </div>
+                    <div class="tooltip-row">
+                        <span>Tiles needed:</span>
+                        <span>${item.tiles_needed}</span>
+                    </div>
+                    <div class="tooltip-row">
+                        <span>Click to select & place</span>
+                    </div>
+                `;
             }
             
             tooltipInfo.innerHTML = infoHTML;
@@ -1035,17 +1084,83 @@
             }
         }
 
+        async function loadWorkbenchDatabase() {
+            try {
+                const response = await fetch('getItems.php?type=workbench');
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const data = await response.json();
+                
+                if (Array.isArray(data)) {
+                    workbenchDatabase = data;
+                    console.log('Workbench loaded:', workbenchDatabase.length);
+                    checkAndLoadTools();
+                } else {
+                    console.warn('Invalid workbench data.');
+                }
+            } catch (error) {
+                console.error('Error loading workbench.', error);
+            }
+        }
+
+        async function loadFurnitureDatabase() {
+            try {
+                const response = await fetch('getItems.php?type=furniture');
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const data = await response.json();
+                
+                if (Array.isArray(data)) {
+                    furnitureDatabase = data;
+                    console.log('Furniture loaded:', furnitureDatabase.length);
+                    checkAndLoadTools();
+                } else {
+                    console.warn('Invalid furniture data.');
+                }
+            } catch (error) {
+                console.error('Error loading furniture.', error);
+            }
+        }
+
+        async function loadSpecialDatabase() {
+            try {
+                const response = await fetch('getItems.php?type=special');
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const data = await response.json();
+                
+                if (Array.isArray(data)) {
+                    specialDatabase = data;
+                    console.log('Special loaded:', specialDatabase.length);
+                    checkAndLoadTools();
+                } else {
+                    console.warn('Invalid special data.');
+                }
+            } catch (error) {
+                console.error('Error loading special.', error);
+            }
+        }
+
         // Load tiles into tiles panel
-        // Load all tools (tiles, storage, decorations) into right panel
+        // Load all tools (tiles, storage, decorations, workbench, furniture, special) into their respective grids
         function loadToolsList() {
             const toolsList = document.getElementById('toolsList');
-            const storageList = document.getElementById('storageList');
-            const decorationsList = document.getElementById('decorationsList');
+            const storageGrid = document.getElementById('storageGrid');
+            const decorationsGrid = document.getElementById('decorationsGrid');
+            const workbenchGrid = document.getElementById('workbenchGrid');
+            const furnitureGrid = document.getElementById('furnitureGrid');
+            const specialGrid = document.getElementById('specialGrid');
 
             // Clear existing
             if (toolsList) toolsList.innerHTML = '';
-            if (storageList) storageList.innerHTML = '';
-            if (decorationsList) decorationsList.innerHTML = '';
+            if (storageGrid) storageGrid.innerHTML = '';
+            if (decorationsGrid) decorationsGrid.innerHTML = '';
+            if (workbenchGrid) workbenchGrid.innerHTML = '';
+            if (furnitureGrid) furnitureGrid.innerHTML = '';
+            if (specialGrid) specialGrid.innerHTML = '';
 
             // Load tiles into left panel
             tilesDatabase.forEach(tile => {
@@ -1072,7 +1187,7 @@
                 if (toolsList) toolsList.appendChild(tileElement);
             });
 
-            // Load storage into right panel
+            // Load storage into storage grid
             storageDatabase.forEach(storage => {
                 const storageElement = document.createElement('div');
                 storageElement.className = 'draggable-item compact storage-item';
@@ -1081,6 +1196,12 @@
                 storageElement.dataset.itemId = storage.id;
                 storageElement.dataset.itemName = storage.name.toLowerCase();
                 storageElement.dataset.category = 'storage';
+                
+                // Calculate width and height based on tiles_needed (assume square root for grid)
+                const tilesNeeded = storage.tiles_needed || 1;
+                const dimension = Math.ceil(Math.sqrt(tilesNeeded));
+                storage.width = dimension;
+                storage.height = dimension;
                 
                 // Check if item can be rotated (not square)
                 const canRotate = storage.width !== storage.height;
@@ -1112,10 +1233,10 @@
                     }
                 }
                 
-                if (storageList) storageList.appendChild(storageElement);
+                if (storageGrid) storageGrid.appendChild(storageElement);
             });
 
-            // Load decorations into right panel
+            // Load decorations into decorations grid
             decorationsDatabase.forEach(decoration => {
                 const decorationElement = document.createElement('div');
                 decorationElement.className = 'draggable-item compact decoration-item';
@@ -1155,7 +1276,154 @@
                     }
                 }
                 
-                if (decorationsList) decorationsList.appendChild(decorationElement);
+                if (decorationsGrid) decorationsGrid.appendChild(decorationElement);
+            });
+
+            // Load workbench into workbench grid
+            workbenchDatabase.forEach(workbench => {
+                const workbenchElement = document.createElement('div');
+                workbenchElement.className = 'draggable-item compact workbench-item';
+                workbenchElement.draggable = true;
+                workbenchElement.dataset.itemType = 'workbench';
+                workbenchElement.dataset.itemId = workbench.id;
+                workbenchElement.dataset.itemName = workbench.name.toLowerCase();
+                workbenchElement.dataset.category = 'workbench';
+                
+                // Calculate width and height based on tiles_needed
+                const tilesNeeded = workbench.tiles_needed || 1;
+                const dimension = Math.ceil(Math.sqrt(tilesNeeded));
+                workbench.width = dimension;
+                workbench.height = dimension;
+                
+                // Check if item can be rotated (not square)
+                const canRotate = workbench.width !== workbench.height;
+                const rotateBtn = canRotate ? '<div class="rotation-btn" title="Rotate (R key)">🔄</div>' : '';
+                
+                workbenchElement.innerHTML = `
+                    ${rotateBtn}
+                    <div class="item-name-top">${workbench.name}</div>
+                    ${renderImageOrEmoji(workbench.image, workbench.name, 'item-icon-large')}
+                    <div class="item-size-bottom">${workbench.tiles_needed} tiles</div>
+                `;
+
+                workbenchElement.addEventListener('click', () => handleItemClick(workbench, workbenchElement));
+                workbenchElement.addEventListener('dragstart', handleDragStart);
+                workbenchElement.addEventListener('dragend', handleDragEnd);
+                workbenchElement.addEventListener('mouseenter', (e) => showTooltipPreview(e, workbench, 'workbench'));
+                workbenchElement.addEventListener('mouseleave', hideTooltip);
+                
+                // Add rotation button click handler
+                if (canRotate) {
+                    const btn = workbenchElement.querySelector('.rotation-btn');
+                    if (btn) {
+                        btn.addEventListener('click', (e) => {
+                            e.stopPropagation();
+                            handleItemClick(workbench, workbenchElement);
+                            isRotated = !isRotated;
+                            showPlacementInstruction();
+                        });
+                    }
+                }
+                
+                if (workbenchGrid) workbenchGrid.appendChild(workbenchElement);
+            });
+
+            // Load furniture into furniture grid
+            furnitureDatabase.forEach(furniture => {
+                const furnitureElement = document.createElement('div');
+                furnitureElement.className = 'draggable-item compact furniture-item';
+                furnitureElement.draggable = true;
+                furnitureElement.dataset.itemType = 'furniture';
+                furnitureElement.dataset.itemId = furniture.id;
+                furnitureElement.dataset.itemName = furniture.name.toLowerCase();
+                furnitureElement.dataset.category = 'furniture';
+                
+                // Calculate width and height based on tiles_needed
+                const tilesNeeded = furniture.tiles_needed || 1;
+                const dimension = Math.ceil(Math.sqrt(tilesNeeded));
+                furniture.width = dimension;
+                furniture.height = dimension;
+                
+                // Check if item can be rotated (not square)
+                const canRotate = furniture.width !== furniture.height;
+                const rotateBtn = canRotate ? '<div class="rotation-btn" title="Rotate (R key)">🔄</div>' : '';
+                
+                furnitureElement.innerHTML = `
+                    ${rotateBtn}
+                    <div class="item-name-top">${furniture.name}</div>
+                    ${renderImageOrEmoji(furniture.image, furniture.name, 'item-icon-large')}
+                    <div class="item-size-bottom">${furniture.tiles_needed} tiles</div>
+                `;
+
+                furnitureElement.addEventListener('click', () => handleItemClick(furniture, furnitureElement));
+                furnitureElement.addEventListener('dragstart', handleDragStart);
+                furnitureElement.addEventListener('dragend', handleDragEnd);
+                furnitureElement.addEventListener('mouseenter', (e) => showTooltipPreview(e, furniture, 'furniture'));
+                furnitureElement.addEventListener('mouseleave', hideTooltip);
+                
+                // Add rotation button click handler
+                if (canRotate) {
+                    const btn = furnitureElement.querySelector('.rotation-btn');
+                    if (btn) {
+                        btn.addEventListener('click', (e) => {
+                            e.stopPropagation();
+                            handleItemClick(furniture, furnitureElement);
+                            isRotated = !isRotated;
+                            showPlacementInstruction();
+                        });
+                    }
+                }
+                
+                if (furnitureGrid) furnitureGrid.appendChild(furnitureElement);
+            });
+
+            // Load special into special grid
+            specialDatabase.forEach(special => {
+                const specialElement = document.createElement('div');
+                specialElement.className = 'draggable-item compact special-item';
+                specialElement.draggable = true;
+                specialElement.dataset.itemType = 'special';
+                specialElement.dataset.itemId = special.id;
+                specialElement.dataset.itemName = special.name.toLowerCase();
+                specialElement.dataset.category = 'special';
+                
+                // Calculate width and height based on tiles_needed
+                const tilesNeeded = special.tiles_needed || 1;
+                const dimension = Math.ceil(Math.sqrt(tilesNeeded));
+                special.width = dimension;
+                special.height = dimension;
+                
+                // Check if item can be rotated (not square)
+                const canRotate = special.width !== special.height;
+                const rotateBtn = canRotate ? '<div class="rotation-btn" title="Rotate (R key)">🔄</div>' : '';
+                
+                specialElement.innerHTML = `
+                    ${rotateBtn}
+                    <div class="item-name-top">${special.name}</div>
+                    ${renderImageOrEmoji(special.image, special.name, 'item-icon-large')}
+                    <div class="item-size-bottom">${special.tiles_needed} tiles</div>
+                `;
+
+                specialElement.addEventListener('click', () => handleItemClick(special, specialElement));
+                specialElement.addEventListener('dragstart', handleDragStart);
+                specialElement.addEventListener('dragend', handleDragEnd);
+                specialElement.addEventListener('mouseenter', (e) => showTooltipPreview(e, special, 'special'));
+                specialElement.addEventListener('mouseleave', hideTooltip);
+                
+                // Add rotation button click handler
+                if (canRotate) {
+                    const btn = specialElement.querySelector('.rotation-btn');
+                    if (btn) {
+                        btn.addEventListener('click', (e) => {
+                            e.stopPropagation();
+                            handleItemClick(special, specialElement);
+                            isRotated = !isRotated;
+                            showPlacementInstruction();
+                        });
+                    }
+                }
+                
+                if (specialGrid) specialGrid.appendChild(specialElement);
             });
         }
 
@@ -1281,10 +1549,11 @@
         let toolsLoadAttempts = 0;
         function checkAndLoadTools() {
             toolsLoadAttempts++;
-            if (tilesDatabase.length > 0 && storageDatabase.length > 0 && decorationsDatabase.length > 0) {
+            if (tilesDatabase.length > 0 && storageDatabase.length > 0 && decorationsDatabase.length > 0 && 
+                workbenchDatabase.length > 0 && furnitureDatabase.length > 0 && specialDatabase.length > 0) {
                 loadToolsList();
-            } else if (toolsLoadAttempts >= 3) {
-                // All three databases should have tried loading by now
+            } else if (toolsLoadAttempts >= 6) {
+                // All six databases should have tried loading by now
                 loadToolsList(); // Load whatever we have
             }
         }
@@ -1318,8 +1587,11 @@
         // Filter function for right-panel search box
         function filterRightItems() {
             const q = document.getElementById('rightSearch').value.trim().toLowerCase();
-            ['storageList','decorationsList'].forEach(id => {
-                const container = document.getElementById(id);
+            // Get all grid containers in the right panel
+            const grids = ['storageGrid', 'decorationsGrid', 'workbenchGrid', 'furnitureGrid', 'specialGrid'];
+            
+            grids.forEach(gridId => {
+                const container = document.getElementById(gridId);
                 if (!container) return;
                 container.querySelectorAll('.draggable-item').forEach(item => {
                     const name = (item.dataset.itemName || '').toLowerCase();
@@ -1382,6 +1654,48 @@
                     draggedItem.height = parseInt(draggedItem.height);
                 } else {
                     console.error("Decoration not found with ID:", itemId);
+                    return;
+                }
+            } else if (itemType === 'workbench') {
+                draggedItem = workbenchDatabase.find(item => parseInt(item.id) === itemId);
+                if (draggedItem) {
+                    draggedItem = {...draggedItem}; // Clone to avoid modifying original
+                    draggedItem.type = 'workbench';
+                    draggedItem.id = parseInt(draggedItem.id);
+                    draggedItem.tiles_needed = parseInt(draggedItem.tiles_needed);
+                    // Set size based on tiles needed
+                    draggedItem.width = Math.ceil(Math.sqrt(draggedItem.tiles_needed));
+                    draggedItem.height = Math.ceil(draggedItem.tiles_needed / draggedItem.width);
+                } else {
+                    console.error("Workbench not found with ID:", itemId);
+                    return;
+                }
+            } else if (itemType === 'furniture') {
+                draggedItem = furnitureDatabase.find(item => parseInt(item.id) === itemId);
+                if (draggedItem) {
+                    draggedItem = {...draggedItem}; // Clone to avoid modifying original
+                    draggedItem.type = 'furniture';
+                    draggedItem.id = parseInt(draggedItem.id);
+                    draggedItem.tiles_needed = parseInt(draggedItem.tiles_needed);
+                    // Set size based on tiles needed
+                    draggedItem.width = Math.ceil(Math.sqrt(draggedItem.tiles_needed));
+                    draggedItem.height = Math.ceil(draggedItem.tiles_needed / draggedItem.width);
+                } else {
+                    console.error("Furniture not found with ID:", itemId);
+                    return;
+                }
+            } else if (itemType === 'special') {
+                draggedItem = specialDatabase.find(item => parseInt(item.id) === itemId);
+                if (draggedItem) {
+                    draggedItem = {...draggedItem}; // Clone to avoid modifying original
+                    draggedItem.type = 'special';
+                    draggedItem.id = parseInt(draggedItem.id);
+                    draggedItem.tiles_needed = parseInt(draggedItem.tiles_needed);
+                    // Set size based on tiles needed
+                    draggedItem.width = Math.ceil(Math.sqrt(draggedItem.tiles_needed));
+                    draggedItem.height = Math.ceil(draggedItem.tiles_needed / draggedItem.width);
+                } else {
+                    console.error("Special not found with ID:", itemId);
                     return;
                 }
             } else {
@@ -1496,6 +1810,24 @@
                     iconHTML = `<img src="${item.image}" alt="${item.name}" class="placed-item-icon-only" style="width:100%;height:100%;object-fit:contain;border-radius:8px;">`;
                 } else {
                     iconHTML = `<div class="placed-item-icon-only">${item.image || '🎨'}</div>`;
+                }
+            } else if (item.type === 'workbench') {
+                if (item.image && item.image.startsWith('uploads/')) {
+                    iconHTML = `<img src="${item.image}" alt="${item.name}" class="placed-item-icon-only" style="width:100%;height:100%;object-fit:contain;border-radius:8px;">`;
+                } else {
+                    iconHTML = `<div class="placed-item-icon-only">${item.image || '🔨'}</div>`;
+                }
+            } else if (item.type === 'furniture') {
+                if (item.image && item.image.startsWith('uploads/')) {
+                    iconHTML = `<img src="${item.image}" alt="${item.name}" class="placed-item-icon-only" style="width:100%;height:100%;object-fit:contain;border-radius:8px;">`;
+                } else {
+                    iconHTML = `<div class="placed-item-icon-only">${item.image || '🪑'}</div>`;
+                }
+            } else if (item.type === 'special') {
+                if (item.image && item.image.startsWith('uploads/')) {
+                    iconHTML = `<img src="${item.image}" alt="${item.name}" class="placed-item-icon-only" style="width:100%;height:100%;object-fit:contain;border-radius:8px;">`;
+                } else {
+                    iconHTML = `<div class="placed-item-icon-only">${item.image || '⭐'}</div>`;
                 }
             } else {
                 if (item.icon && item.icon.startsWith('uploads/')) {
@@ -1802,6 +2134,30 @@
             console.log('Grid state cleaned up');
         }
         
+        // Setup right panel tabs
+        function setupRightPanelTabs() {
+            const tabs = document.querySelectorAll('.right-tab');
+            const tabContents = document.querySelectorAll('.tab-content');
+            
+            tabs.forEach(tab => {
+                tab.addEventListener('click', () => {
+                    // Remove active class from all tabs
+                    tabs.forEach(t => t.classList.remove('active'));
+                    // Add active class to clicked tab
+                    tab.classList.add('active');
+                    
+                    // Hide all tab contents
+                    tabContents.forEach(content => content.classList.remove('active'));
+                    // Show the selected tab content
+                    const targetTab = tab.dataset.tab;
+                    const targetContent = document.getElementById(`tab-${targetTab}`);
+                    if (targetContent) {
+                        targetContent.classList.add('active');
+                    }
+                });
+            });
+        }
+        
         // Initialize on load
         document.addEventListener('DOMContentLoaded', () => {
             initializeGrid();
@@ -1810,6 +2166,12 @@
             loadTilesDatabase();
             loadStorageDatabase();
             loadDecorationsDatabase();
+            loadWorkbenchDatabase();
+            loadFurnitureDatabase();
+            loadSpecialDatabase();
+            
+            // Setup tab switching for right panel
+            setupRightPanelTabs();
             
             // Setup collapsible sections
             setupCollapsibleSections();

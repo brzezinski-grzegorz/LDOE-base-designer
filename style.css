@@ -139,6 +139,49 @@ body {
     max-height: 0;
 }
 
+/* Right Panel Tabs */
+.right-tabs {
+    display: flex;
+    gap: 5px;
+    margin-bottom: 15px;
+    flex-wrap: wrap;
+}
+
+.right-tab {
+    flex: 1;
+    min-width: 80px;
+    padding: 8px 12px;
+    background: #f8f9fa;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 600;
+    color: #666;
+    text-decoration: none;
+    transition: all 0.3s ease;
+    text-align: center;
+}
+
+.right-tab:hover {
+    background: #e9ecef;
+    transform: translateY(-1px);
+}
+
+.right-tab.active {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+}
+
+.tab-content {
+    display: none;
+    height: 100%;
+}
+
+.tab-content.active {
+    display: block;
+}
+
 /* Grid Controls Panel in Left Sidebar */
 .grid-controls-panel {
     margin-top: 15px;
