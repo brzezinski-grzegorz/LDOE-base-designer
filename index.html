@@ -1197,11 +1197,18 @@
                 storageElement.dataset.itemName = storage.name.toLowerCase();
                 storageElement.dataset.category = 'storage';
                 
-                // Calculate width and height based on tiles_needed (assume square root for grid)
+                // Calculate width and height based on tiles_needed
                 const tilesNeeded = storage.tiles_needed || 1;
-                const dimension = Math.ceil(Math.sqrt(tilesNeeded));
-                storage.width = dimension;
-                storage.height = dimension;
+                // Find optimal rectangular dimensions (prefer wider rectangles)
+                let width = Math.ceil(Math.sqrt(tilesNeeded));
+                let height = Math.ceil(tilesNeeded / width);
+                // Adjust if the product is less than tilesNeeded
+                while (width * height < tilesNeeded) {
+                    width++;
+                    height = Math.ceil(tilesNeeded / width);
+                }
+                storage.width = width;
+                storage.height = height;
                 
                 // Check if item can be rotated (not square)
                 const canRotate = storage.width !== storage.height;
@@ -1291,9 +1298,16 @@
                 
                 // Calculate width and height based on tiles_needed
                 const tilesNeeded = workbench.tiles_needed || 1;
-                const dimension = Math.ceil(Math.sqrt(tilesNeeded));
-                workbench.width = dimension;
-                workbench.height = dimension;
+                // Find optimal rectangular dimensions (prefer wider rectangles)
+                let width = Math.ceil(Math.sqrt(tilesNeeded));
+                let height = Math.ceil(tilesNeeded / width);
+                // Adjust if the product is less than tilesNeeded
+                while (width * height < tilesNeeded) {
+                    width++;
+                    height = Math.ceil(tilesNeeded / width);
+                }
+                workbench.width = width;
+                workbench.height = height;
                 
                 // Check if item can be rotated (not square)
                 const canRotate = workbench.width !== workbench.height;
@@ -1340,9 +1354,16 @@
                 
                 // Calculate width and height based on tiles_needed
                 const tilesNeeded = furniture.tiles_needed || 1;
-                const dimension = Math.ceil(Math.sqrt(tilesNeeded));
-                furniture.width = dimension;
-                furniture.height = dimension;
+                // Find optimal rectangular dimensions (prefer wider rectangles)
+                let width = Math.ceil(Math.sqrt(tilesNeeded));
+                let height = Math.ceil(tilesNeeded / width);
+                // Adjust if the product is less than tilesNeeded
+                while (width * height < tilesNeeded) {
+                    width++;
+                    height = Math.ceil(tilesNeeded / width);
+                }
+                furniture.width = width;
+                furniture.height = height;
                 
                 // Check if item can be rotated (not square)
                 const canRotate = furniture.width !== furniture.height;
@@ -1389,9 +1410,16 @@
                 
                 // Calculate width and height based on tiles_needed
                 const tilesNeeded = special.tiles_needed || 1;
-                const dimension = Math.ceil(Math.sqrt(tilesNeeded));
-                special.width = dimension;
-                special.height = dimension;
+                // Find optimal rectangular dimensions (prefer wider rectangles)
+                let width = Math.ceil(Math.sqrt(tilesNeeded));
+                let height = Math.ceil(tilesNeeded / width);
+                // Adjust if the product is less than tilesNeeded
+                while (width * height < tilesNeeded) {
+                    width++;
+                    height = Math.ceil(tilesNeeded / width);
+                }
+                special.width = width;
+                special.height = height;
                 
                 // Check if item can be rotated (not square)
                 const canRotate = special.width !== special.height;
@@ -1638,8 +1666,14 @@
                     draggedItem.items_per_slot = parseInt(draggedItem.items_per_slot);
                     draggedItem.tiles_needed = parseInt(draggedItem.tiles_needed);
                     // Set size for storage items based on tiles needed
-                    draggedItem.width = Math.ceil(Math.sqrt(draggedItem.tiles_needed));
-                    draggedItem.height = Math.ceil(draggedItem.tiles_needed / draggedItem.width);
+                    let width = Math.ceil(Math.sqrt(draggedItem.tiles_needed));
+                    let height = Math.ceil(draggedItem.tiles_needed / width);
+                    while (width * height < draggedItem.tiles_needed) {
+                        width++;
+                        height = Math.ceil(draggedItem.tiles_needed / width);
+                    }
+                    draggedItem.width = width;
+                    draggedItem.height = height;
                 } else {
                     console.error("Storage not found with ID:", itemId);
                     return;
@@ -1664,8 +1698,14 @@
                     draggedItem.id = parseInt(draggedItem.id);
                     draggedItem.tiles_needed = parseInt(draggedItem.tiles_needed);
                     // Set size based on tiles needed
-                    draggedItem.width = Math.ceil(Math.sqrt(draggedItem.tiles_needed));
-                    draggedItem.height = Math.ceil(draggedItem.tiles_needed / draggedItem.width);
+                    let width = Math.ceil(Math.sqrt(draggedItem.tiles_needed));
+                    let height = Math.ceil(draggedItem.tiles_needed / width);
+                    while (width * height < draggedItem.tiles_needed) {
+                        width++;
+                        height = Math.ceil(draggedItem.tiles_needed / width);
+                    }
+                    draggedItem.width = width;
+                    draggedItem.height = height;
                 } else {
                     console.error("Workbench not found with ID:", itemId);
                     return;
@@ -1678,8 +1718,14 @@
                     draggedItem.id = parseInt(draggedItem.id);
                     draggedItem.tiles_needed = parseInt(draggedItem.tiles_needed);
                     // Set size based on tiles needed
-                    draggedItem.width = Math.ceil(Math.sqrt(draggedItem.tiles_needed));
-                    draggedItem.height = Math.ceil(draggedItem.tiles_needed / draggedItem.width);
+                    let width = Math.ceil(Math.sqrt(draggedItem.tiles_needed));
+                    let height = Math.ceil(draggedItem.tiles_needed / width);
+                    while (width * height < draggedItem.tiles_needed) {
+                        width++;
+                        height = Math.ceil(draggedItem.tiles_needed / width);
+                    }
+                    draggedItem.width = width;
+                    draggedItem.height = height;
                 } else {
                     console.error("Furniture not found with ID:", itemId);
                     return;
@@ -1692,8 +1738,14 @@
                     draggedItem.id = parseInt(draggedItem.id);
                     draggedItem.tiles_needed = parseInt(draggedItem.tiles_needed);
                     // Set size based on tiles needed
-                    draggedItem.width = Math.ceil(Math.sqrt(draggedItem.tiles_needed));
-                    draggedItem.height = Math.ceil(draggedItem.tiles_needed / draggedItem.width);
+                    let width = Math.ceil(Math.sqrt(draggedItem.tiles_needed));
+                    let height = Math.ceil(draggedItem.tiles_needed / width);
+                    while (width * height < draggedItem.tiles_needed) {
+                        width++;
+                        height = Math.ceil(draggedItem.tiles_needed / width);
+                    }
+                    draggedItem.width = width;
+                    draggedItem.height = height;
                 } else {
                     console.error("Special not found with ID:", itemId);
                     return;
