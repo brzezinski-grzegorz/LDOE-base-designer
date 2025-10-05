@@ -11,6 +11,18 @@
     <div class="container">
         <!-- Left Panel -->
         <div class="left-panel">
+            <!-- Grid View (moved above Tiles) -->
+            <div class="grid-view-panel">
+                <h3 class="controls-title">Grid View</h3>
+                <div class="quadrant-buttons">
+                    <button class="btn btn-quadrant" onclick="setGridView('full')" id="viewFull">🔲 Full Grid</button>
+                    <button class="btn btn-quadrant" onclick="setGridView('topLeft')" id="viewTopLeft">↖️ Top Left</button>
+                    <button class="btn btn-quadrant" onclick="setGridView('topRight')" id="viewTopRight">↗️ Top Right</button>
+                    <button class="btn btn-quadrant" onclick="setGridView('bottomLeft')" id="viewBottomLeft">↙️ Bottom Left</button>
+                    <button class="btn btn-quadrant" onclick="setGridView('bottomRight')" id="viewBottomRight">↘️ Bottom Right</button>
+                </div>
+            </div>
+
             <h2 class="panel-title">Tiles</h2>
                         
             <!-- Tiles tools grid -->
@@ -18,7 +30,7 @@
                 <!-- Tiles will be loaded here -->
             </div>
             
-            <!-- Grid Controls -->
+            <!-- Grid Controls (moved to bottom) -->
             <div class="grid-controls-panel">
                 <h3 class="controls-title">Layout Controls</h3>
                 <button class="btn btn-block" onclick="saveGrid()">💾 Save Layout</button>
@@ -123,7 +135,21 @@
         let selectedItem = null; // Currently selected item for placement
         let selectedItemElement = null; // The UI element that was clicked
         let isRotated = false; // Track if selected item is rotated (90 degrees)
+        
+        // Grid view system
+        let currentView = 'full'; // 'full', 'topLeft', 'topRight', 'bottomLeft', 'bottomRight'
+        let viewOffset = { x: 0, y: 0 }; // Offset for quadrant views
+        let viewSize = 20; // Number of cells to show (20 for full, 10 for quadrants)
 
+        // Get current cell size based on view
+        function getCellSize() {
+            if (currentView === 'full') {
+                return 40; // Standard size for full grid
+            } else {
+                return 80; // Double size for quadrant views (10x10)
+            }
+        }
+        
         // Helper function to render image or emoji
         function renderImageOrEmoji(imagePath, altText = '', className = 'item-icon-large') {
             if (imagePath && imagePath.startsWith('uploads/')) {
@@ -135,15 +161,184 @@
             }
         }
 
+        // Set grid view (full or quadrant)
+        function setGridView(view) {
+            currentView = view;
+            
+            // Update button states
+            document.querySelectorAll('.btn-quadrant').forEach(btn => btn.classList.remove('active'));
+            document.getElementById('view' + view.charAt(0).toUpperCase() + view.slice(1)).classList.add('active');
+            
+            // Set view parameters
+            if (view === 'full') {
+                viewOffset = { x: 0, y: 0 };
+                viewSize = 20;
+            } else if (view === 'topLeft') {
+                viewOffset = { x: 0, y: 0 };
+                viewSize = 10;
+            } else if (view === 'topRight') {
+                viewOffset = { x: 10, y: 0 };
+                viewSize = 10;
+            } else if (view === 'bottomLeft') {
+                viewOffset = { x: 0, y: 10 };
+                viewSize = 10;
+            } else if (view === 'bottomRight') {
+                viewOffset = { x: 10, y: 10 };
+                viewSize = 10;
+            }
+            
+            // Update grid CSS variables
+            const gridElement = document.getElementById('grid');
+            if (gridElement) {
+                gridElement.style.setProperty('--grid-cols', viewSize);
+                gridElement.style.setProperty('--grid-rows', viewSize);
+                gridElement.style.setProperty('--cell-size', getCellSize() + 'px');
+            }
+            
+            // Reinitialize grid with new view
+            initializeGrid();
+            
+            // Redraw all placed items in the new view
+            redrawPlacedItems();
+        }
+        
+        // Redraw placed items for current view
+        function redrawPlacedItems() {
+            // Remove all placed item elements from DOM
+            document.querySelectorAll('.placed-item').forEach(el => el.remove());
+            
+            // Redraw items that are visible in current view
+            placedItems.forEach(placed => {
+                if (placed.item.type === 'tile') return; // Tiles are handled by cell styling
+                
+                const item = placed.item;
+                const x = placed.x;
+                const y = placed.y;
+                
+                // Check if item is at least partially visible in current view
+                const itemEndX = x + item.width - 1;
+                const itemEndY = y + item.height - 1;
+                const viewEndX = viewOffset.x + viewSize - 1;
+                const viewEndY = viewOffset.y + viewSize - 1;
+                
+                if (itemEndX >= viewOffset.x && x <= viewEndX && itemEndY >= viewOffset.y && y <= viewEndY) {
+                    // Calculate position relative to current view
+                    const relativeX = x - viewOffset.x;
+                    const relativeY = y - viewOffset.y;
+                    
+                    // Only create element if at least part is in view
+                    if (relativeX < viewSize && relativeY < viewSize) {
+                        createPlacedItemElement(placed, relativeX, relativeY);
+                    }
+                }
+            });
+        }
+        
+        // Create a placed item element on the grid
+        function createPlacedItemElement(placed, displayX, displayY) {
+            const item = placed.item;
+            const actualX = placed.x;
+            const actualY = placed.y;
+            
+            // Calculate visible dimensions
+            let visibleWidth = item.width;
+            let visibleHeight = item.height;
+            
+            // Adjust if item extends beyond view
+            const viewEndX = viewOffset.x + viewSize;
+            const viewEndY = viewOffset.y + viewSize;
+            
+            if (actualX + item.width > viewEndX) {
+                visibleWidth = viewEndX - actualX;
+            }
+            if (actualY + item.height > viewEndY) {
+                visibleHeight = viewEndY - actualY;
+            }
+            
+            // Don't show if completely outside view
+            if (displayX >= viewSize || displayY >= viewSize || visibleWidth <= 0 || visibleHeight <= 0) {
+                return;
+            }
+            
+            // Adjust display position if item starts before view
+            let adjustedDisplayX = displayX;
+            let adjustedDisplayY = displayY;
+            
+            if (displayX < 0) {
+                visibleWidth += displayX;
+                adjustedDisplayX = 0;
+            }
+            if (displayY < 0) {
+                visibleHeight += displayY;
+                adjustedDisplayY = 0;
+            }
+            
+            const placedElement = document.createElement('div');
+            placedElement.className = `placed-item placed-${item.type}`;
+            const cellSize = getCellSize();
+            const cellWithGap = cellSize + 1;
+            placedElement.style.width = `${visibleWidth * cellSize + (visibleWidth - 1)}px`;
+            placedElement.style.height = `${visibleHeight * cellSize + (visibleHeight - 1)}px`;
+            placedElement.style.left = `${adjustedDisplayX * cellWithGap}px`;
+            placedElement.style.top = `${adjustedDisplayY * cellWithGap}px`;
+            placedElement.draggable = true;
+            placedElement.dataset.itemId = item.id;
+            placedElement.dataset.itemType = item.type;
+            placedElement.dataset.actualX = actualX;
+            placedElement.dataset.actualY = actualY;
+            
+            placedElement.id = placed.element ? placed.element.id : `placed-${item.type}-${item.id}-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+            
+            let iconHTML = '';
+            if (item.type === 'storage') {
+                iconHTML = `<div class="placed-item-icon-only">${renderImageOrEmoji(item.image, item.name)}</div>`;
+            } else if (item.type === 'decoration') {
+                iconHTML = `<div class="placed-item-icon-only">${renderImageOrEmoji(item.image, item.name)}</div>`;
+            } else if (item.type === 'workbench') {
+                iconHTML = `<div class="placed-item-icon-only">${renderImageOrEmoji(item.image, item.name)}</div>`;
+            } else if (item.type === 'furniture') {
+                iconHTML = `<div class="placed-item-icon-only">${renderImageOrEmoji(item.image, item.name)}</div>`;
+            } else if (item.type === 'special') {
+                iconHTML = `<div class="placed-item-icon-only">${renderImageOrEmoji(item.image, item.name)}</div>`;
+            }
+            
+            placedElement.innerHTML = iconHTML;
+            
+            placedElement.addEventListener('dragstart', handleDragStart);
+            placedElement.addEventListener('dragend', handleDragEnd);
+            placedElement.addEventListener('mouseenter', (e) => showTooltip(e, item));
+            placedElement.addEventListener('mouseleave', hideTooltip);
+            placedElement.addEventListener('click', function() {
+                removeItem(placedElement);
+            });
+            
+            document.querySelector('.grid').appendChild(placedElement);
+            
+            // Update the reference
+            placed.element = placedElement;
+        }
+        
         // Initialize grid
         function initializeGrid() {
             const gridElement = document.getElementById('grid');
             gridElement.innerHTML = '';
             grid = [];
-
+            
+            // Always maintain full 20x20 grid data
             for (let y = 0; y < GRID_SIZE; y++) {
                 grid[y] = [];
                 for (let x = 0; x < GRID_SIZE; x++) {
+                    grid[y][x] = {
+                        occupied: false,
+                        itemId: null,
+                        itemType: null
+                    };
+                }
+            }
+
+            // Display only the cells in current view
+            for (let y = viewOffset.y; y < viewOffset.y + viewSize; y++) {
+                for (let x = viewOffset.x; x < viewOffset.x + viewSize; x++) {
                     const cell = document.createElement('div');
                     cell.className = 'grid-cell';
                     cell.dataset.x = x;
@@ -153,15 +348,11 @@
                     const isBorderCell = x === 0 || x === GRID_SIZE - 1 || y === 0 || y === GRID_SIZE - 1;
                     if (isBorderCell) {
                         cell.classList.add('border-cell');
-                        grid[y][x] = { occupied: true, itemId: null, itemType: 'border' };
                     } else {
                         // Check if this cell is part of the blocked truck area (x: 13-15, y: 15-18)
                         const isTruckArea = (x >= 13 && x <= 15 && y >= 15 && y <= 18);
                         if (isTruckArea) {
                             cell.classList.add('blocked-truck-cell');
-                            grid[y][x] = { occupied: true, itemId: null, itemType: 'truck-blocked' };
-                        } else {
-                            grid[y][x] = { occupied: false, itemId: null, itemType: null };
                         }
                     }
                     
@@ -215,13 +406,29 @@
 
         // Add truck overlay to blocked grid area
         function addTruckOverlay() {
+            // Only show truck if it's in the current view
+            const truckX = 13, truckY = 15, truckWidth = 3, truckHeight = 4;
+            
+            // Check if truck is visible in current view
+            const viewEndX = viewOffset.x + viewSize;
+            const viewEndY = viewOffset.y + viewSize;
+            
+            if (truckX + truckWidth <= viewOffset.x || truckX >= viewEndX ||
+                truckY + truckHeight <= viewOffset.y || truckY >= viewEndY) {
+                // Truck is not visible in this view
+                return;
+            }
+            
             const gridElement = document.getElementById('grid');
             const truckOverlay = document.createElement('div');
             truckOverlay.className = 'truck-overlay';
             truckOverlay.innerHTML = '<img src="uploads/truck.png" alt="Truck" style="width: 100%; height: 100%; object-fit: contain; transform: rotate(320deg);" draggable="false">';
             
+            // Calculate relative position in view
+            const relativeX = Math.max(0, truckX - viewOffset.x);
+            const relativeY = Math.max(0, truckY - viewOffset.y);
+            
             // Position the overlay over cells [13,15] to [15,18]
-            // That's 3 cells wide (13, 14, 15) and 4 cells tall (15, 16, 17, 18)
             const startCell = document.querySelector('.grid-cell[data-x="13"][data-y="15"]');
             const endCell = document.querySelector('.grid-cell[data-x="15"][data-y="18"]');
             
@@ -1850,10 +2057,12 @@
             // Create placed item element (only icon, no text)
             const placedElement = document.createElement('div');
             placedElement.className = `placed-item placed-${item.type}`;
-            placedElement.style.width = `${item.width * 40 + (item.width - 1)}px`;
-            placedElement.style.height = `${item.height * 40 + (item.height - 1)}px`;
-            placedElement.style.left = `${x * 41}px`;
-            placedElement.style.top = `${y * 41}px`;
+            const cellSize = getCellSize();
+            const cellWithGap = cellSize + 1;
+            placedElement.style.width = `${item.width * cellSize + (item.width - 1)}px`;
+            placedElement.style.height = `${item.height * cellSize + (item.height - 1)}px`;
+            placedElement.style.left = `${x * cellWithGap}px`;
+            placedElement.style.top = `${y * cellWithGap}px`;
             placedElement.draggable = true;
             placedElement.dataset.itemId = item.id;
             placedElement.dataset.itemType = item.type;
@@ -2227,6 +2436,20 @@
         
         // Initialize on load
         document.addEventListener('DOMContentLoaded', () => {
+            // Set initial grid size CSS variables
+            const gridElement = document.getElementById('grid');
+            if (gridElement) {
+                gridElement.style.setProperty('--grid-cols', viewSize);
+                gridElement.style.setProperty('--grid-rows', viewSize);
+                gridElement.style.setProperty('--cell-size', getCellSize() + 'px');
+            }
+            
+            // Set full view as active by default
+            const fullViewBtn = document.getElementById('viewFull');
+            if (fullViewBtn) {
+                fullViewBtn.classList.add('active');
+            }
+            
             initializeGrid();
             
             // Load all databases
