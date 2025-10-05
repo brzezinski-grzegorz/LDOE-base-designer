@@ -142,30 +142,49 @@ body {
 /* Right Panel Tabs */
 .right-tabs {
     display: flex;
-    gap: 5px;
-    margin-bottom: 15px;
-    flex-wrap: wrap;
+    gap: 3px;
+    margin-bottom: 12px;
+    flex-wrap: nowrap;
+    overflow-x: hidden;
+    overflow-y: visible;
 }
 
 .right-tab {
-    flex: 1;
-    min-width: 80px;
-    padding: 8px 12px;
+    flex: 1 1 0;
+    min-width: 0;
+    max-width: none;
+    padding: 6px 2px;
     background: #f8f9fa;
     border: none;
-    border-radius: 8px;
+    border-radius: 6px;
     cursor: pointer;
-    font-size: 13px;
+    font-size: 10px;
     font-weight: 600;
     color: #666;
     text-decoration: none;
-    transition: all 0.3s ease;
+    transition: background 0.3s ease, color 0.3s ease;
     text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    white-space: normal;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    box-sizing: border-box;
+    line-height: 1.2;
+}
+
+.right-tab span {
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    white-space: normal;
+    max-width: 100%;
 }
 
 .right-tab:hover {
     background: #e9ecef;
-    transform: translateY(-1px);
 }
 
 .right-tab.active {
@@ -259,8 +278,6 @@ body {
 
 .item-name-top {
     font-size: 12px;
-    text-overflow: ellipsis;
-    white-space: nowrap;
     width: 100%;
     line-height: 1.1;
     margin-bottom: 4px; /* small gap */
@@ -346,13 +363,59 @@ body {
     box-shadow: 0 8px 30px rgba(0, 0, 0, 0.1);
     overflow: auto;
     display: flex;
+    flex-direction: column;
     align-items: center;
-    justify-content: center;
+    justify-content: flex-start;
+    position: relative;
+}
+
+/* Zoom Controls */
+.zoom-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 15px;
+    padding: 8px 12px;
+    background: rgba(102, 126, 234, 0.1);
+    border-radius: 8px;
+    border: 2px solid #667eea;
+}
+
+.zoom-btn {
+    padding: 6px 12px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 14px;
+    transition: all 0.3s ease;
+    min-width: 40px;
+}
+
+.zoom-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+}
+
+.zoom-btn:active {
+    transform: translateY(0);
+}
+
+.zoom-level {
+    font-weight: 600;
+    font-size: 14px;
+    color: #667eea;
+    min-width: 50px;
+    text-align: center;
 }
 
 .grid-wrapper {
     display: inline-block;
     position: relative;
+    transition: transform 0.3s ease;
+    transform-origin: center center;
 }
 
 .grid {
