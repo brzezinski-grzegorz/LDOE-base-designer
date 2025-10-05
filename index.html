@@ -11,11 +11,11 @@
     <div class="container">
         <!-- Left Panel -->
         <div class="left-panel">
-            <h2 class="panel-title">Tiles & Storages</h2>
+            <h2 class="panel-title">Tiles</h2>
                         
-            <!-- All tools in one grid -->
+            <!-- Tiles tools grid -->
             <div class="items-grid" id="toolsList">
-                <!-- Tiles, Storage, and Decorations will be loaded here -->
+                <!-- Tiles will be loaded here -->
             </div>
             
             <!-- Grid Controls -->
@@ -38,10 +38,34 @@
 
         <!-- Right Panel -->
         <div class="right-panel">
-            <h2 class="panel-title">Instructions</h2>
-            <div class="instructions-content">
-                <!-- Instructions will be added here later -->
-                <p style="color: #666; padding: 20px; text-align: center;">Instructions coming soon...</p>
+            <h2 class="panel-title">Storage & Decorations</h2>
+            <div class="instructions-content" id="rightTools">
+                <!-- Search box for right panel -->
+                <div class="search-box" style="margin-bottom:10px;">
+                    <input type="text" id="rightSearch" placeholder="🔍 Search storage & decorations..." oninput="filterRightItems()">
+                </div>
+
+                <!-- Storage collapsible section -->
+                <div class="collapsible-section">
+                    <div class="collapsible-header">
+                        <span class="collapsible-icon">▼</span>
+                        <strong style="margin-left:8px">Storage</strong>
+                    </div>
+                    <div class="collapsible-content show">
+                        <div class="items-grid" id="storageList"></div>
+                    </div>
+                </div>
+
+                <!-- Decorations collapsible section -->
+                <div class="collapsible-section">
+                    <div class="collapsible-header">
+                        <span class="collapsible-icon">▼</span>
+                        <strong style="margin-left:8px">Decorations</strong>
+                    </div>
+                    <div class="collapsible-content show">
+                        <div class="items-grid" id="decorationsList"></div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -76,6 +100,7 @@
         // New: Click-to-place system
         let selectedItem = null; // Currently selected item for placement
         let selectedItemElement = null; // The UI element that was clicked
+        let isRotated = false; // Track if selected item is rotated (90 degrees)
 
         // Helper function to render image or emoji
         function renderImageOrEmoji(imagePath, altText = '', className = 'item-icon-large') {
@@ -212,6 +237,9 @@
             selectedItemElement = element;
             element.classList.add('selected');
             
+            // Reset rotation when selecting new item
+            isRotated = false;
+            
             // Add cursor class to body
             document.body.classList.add('item-selected');
             
@@ -226,9 +254,15 @@
             if (selectedItem) {
                 e.stopPropagation();
                 
+                // Use rotated dimensions if item is rotated
+                const width = isRotated ? selectedItem.height : selectedItem.width;
+                const height = isRotated ? selectedItem.width : selectedItem.height;
+                
                 // Check if item can be placed
-                if (canPlaceItem(x, y, selectedItem.width, selectedItem.height, selectedItem.type)) {
-                    placeItem(x, y, selectedItem);
+                if (canPlaceItem(x, y, width, height, selectedItem.type)) {
+                    // Create item with rotated dimensions
+                    const itemToPlace = {...selectedItem, width, height, isRotated};
+                    placeItem(x, y, itemToPlace);
                     console.log(`✓ Item placed at [${x},${y}]`);
                     
                     // Don't deselect - allow placing multiple of same item
@@ -251,10 +285,13 @@
             
             // If we have a selected item, show preview
             if (selectedItem) {
-                if (canPlaceItem(x, y, selectedItem.width, selectedItem.height, selectedItem.type)) {
-                    highlightArea(x, y, selectedItem.width, selectedItem.height, 'drop-hover');
+                const width = isRotated ? selectedItem.height : selectedItem.width;
+                const height = isRotated ? selectedItem.width : selectedItem.height;
+                
+                if (canPlaceItem(x, y, width, height, selectedItem.type)) {
+                    highlightArea(x, y, width, height, 'drop-hover');
                 } else {
-                    highlightArea(x, y, selectedItem.width, selectedItem.height, 'invalid-drop');
+                    highlightArea(x, y, width, height, 'invalid-drop');
                 }
             }
         }
@@ -281,6 +318,7 @@
             }
             selectedItem = null;
             selectedItemElement = null;
+            isRotated = false;
             clearHoverPreviews();
             hidePlacementInstruction();
             document.body.classList.remove('item-selected');
@@ -292,11 +330,17 @@
             if (!instruction) {
                 instruction = document.createElement('div');
                 instruction.id = 'placement-instruction';
-                instruction.innerHTML = `
-                    <span>📍 Click on grid to place • Right-click or ESC to cancel</span>
-                `;
                 document.body.appendChild(instruction);
             }
+            
+            // Update instruction text based on item dimensions and rotation state
+            const canRotate = selectedItem && (selectedItem.width !== selectedItem.height);
+            const rotationHint = canRotate ? ' • Press R to rotate' : '';
+            const rotationStatus = isRotated ? ' 🔄' : '';
+            
+            instruction.innerHTML = `
+                <span>📍 Click on grid to place${rotationStatus}${rotationHint} • ESC to cancel</span>
+            `;
             instruction.style.display = 'block';
         }
         
@@ -995,9 +1039,15 @@
         // Load all tools (tiles, storage, decorations) into right panel
         function loadToolsList() {
             const toolsList = document.getElementById('toolsList');
-            toolsList.innerHTML = '';
+            const storageList = document.getElementById('storageList');
+            const decorationsList = document.getElementById('decorationsList');
 
-            // Load tiles
+            // Clear existing
+            if (toolsList) toolsList.innerHTML = '';
+            if (storageList) storageList.innerHTML = '';
+            if (decorationsList) decorationsList.innerHTML = '';
+
+            // Load tiles into left panel
             tilesDatabase.forEach(tile => {
                 const tileElement = document.createElement('div');
                 tileElement.className = 'draggable-item compact tile-item';
@@ -1019,10 +1069,10 @@
                 tileElement.addEventListener('mouseenter', (e) => showTooltipPreview(e, tile, 'tile'));
                 tileElement.addEventListener('mouseleave', hideTooltip);
                 
-                toolsList.appendChild(tileElement);
+                if (toolsList) toolsList.appendChild(tileElement);
             });
 
-            // Load storage
+            // Load storage into right panel
             storageDatabase.forEach(storage => {
                 const storageElement = document.createElement('div');
                 storageElement.className = 'draggable-item compact storage-item';
@@ -1032,7 +1082,12 @@
                 storageElement.dataset.itemName = storage.name.toLowerCase();
                 storageElement.dataset.category = 'storage';
                 
+                // Check if item can be rotated (not square)
+                const canRotate = storage.width !== storage.height;
+                const rotateBtn = canRotate ? '<div class="rotation-btn" title="Rotate (R key)">🔄</div>' : '';
+                
                 storageElement.innerHTML = `
+                    ${rotateBtn}
                     <div class="item-name-top">${storage.name}</div>
                     ${renderImageOrEmoji(storage.image, storage.name, 'item-icon-large')}
                     <div class="item-size-bottom">${storage.tiles_needed} tiles</div>
@@ -1044,10 +1099,23 @@
                 storageElement.addEventListener('mouseenter', (e) => showTooltipPreview(e, storage, 'storage'));
                 storageElement.addEventListener('mouseleave', hideTooltip);
                 
-                toolsList.appendChild(storageElement);
+                // Add rotation button click handler
+                if (canRotate) {
+                    const btn = storageElement.querySelector('.rotation-btn');
+                    if (btn) {
+                        btn.addEventListener('click', (e) => {
+                            e.stopPropagation();
+                            handleItemClick(storage, storageElement);
+                            isRotated = !isRotated;
+                            showPlacementInstruction();
+                        });
+                    }
+                }
+                
+                if (storageList) storageList.appendChild(storageElement);
             });
 
-            // Load decorations
+            // Load decorations into right panel
             decorationsDatabase.forEach(decoration => {
                 const decorationElement = document.createElement('div');
                 decorationElement.className = 'draggable-item compact decoration-item';
@@ -1057,7 +1125,12 @@
                 decorationElement.dataset.itemName = decoration.name.toLowerCase();
                 decorationElement.dataset.category = 'decoration';
                 
+                // Check if item can be rotated (not square)
+                const canRotate = decoration.width !== decoration.height;
+                const rotateBtn = canRotate ? '<div class="rotation-btn" title="Rotate (R key)">🔄</div>' : '';
+                
                 decorationElement.innerHTML = `
+                    ${rotateBtn}
                     <div class="item-name-top">${decoration.name}</div>
                     ${renderImageOrEmoji(decoration.image, decoration.name, 'item-icon-large')}
                     <div class="item-size-bottom">${decoration.width}×${decoration.height}</div>
@@ -1069,10 +1142,21 @@
                 decorationElement.addEventListener('mouseenter', (e) => showTooltipPreview(e, decoration, 'decoration'));
                 decorationElement.addEventListener('mouseleave', hideTooltip);
                 
-                toolsList.appendChild(decorationElement);
+                // Add rotation button click handler
+                if (canRotate) {
+                    const btn = decorationElement.querySelector('.rotation-btn');
+                    if (btn) {
+                        btn.addEventListener('click', (e) => {
+                            e.stopPropagation();
+                            handleItemClick(decoration, decorationElement);
+                            isRotated = !isRotated;
+                            showPlacementInstruction();
+                        });
+                    }
+                }
+                
+                if (decorationsList) decorationsList.appendChild(decorationElement);
             });
-            
-            console.log('Tools loaded:', tilesDatabase.length + storageDatabase.length + decorationsDatabase.length);
         }
 
         function loadTilesList() {
@@ -1226,6 +1310,23 @@
                         icon.textContent = '▼';
                     } else {
                         icon.textContent = '►';
+                    }
+                });
+            });
+        }
+
+        // Filter function for right-panel search box
+        function filterRightItems() {
+            const q = document.getElementById('rightSearch').value.trim().toLowerCase();
+            ['storageList','decorationsList'].forEach(id => {
+                const container = document.getElementById(id);
+                if (!container) return;
+                container.querySelectorAll('.draggable-item').forEach(item => {
+                    const name = (item.dataset.itemName || '').toLowerCase();
+                    if (name.includes(q)) {
+                        item.style.display = '';
+                    } else {
+                        item.style.display = 'none';
                     }
                 });
             });
@@ -1386,19 +1487,19 @@
             let iconHTML = '';
             if (item.type === 'storage') {
                 if (item.image && item.image.startsWith('uploads/')) {
-                    iconHTML = `<img src="${item.image}" alt="${item.name}" class="placed-item-icon-only" style="width:100%;height:100%;object-fit:cover;border-radius:8px;">`;
+                    iconHTML = `<img src="${item.image}" alt="${item.name}" class="placed-item-icon-only" style="width:100%;height:100%;object-fit:contain;border-radius:8px;">`;
                 } else {
                     iconHTML = `<div class="placed-item-icon-only">${item.image || '📦'}</div>`;
                 }
             } else if (item.type === 'decoration') {
                 if (item.image && item.image.startsWith('uploads/')) {
-                    iconHTML = `<img src="${item.image}" alt="${item.name}" class="placed-item-icon-only" style="width:100%;height:100%;object-fit:cover;border-radius:8px;">`;
+                    iconHTML = `<img src="${item.image}" alt="${item.name}" class="placed-item-icon-only" style="width:100%;height:100%;object-fit:contain;border-radius:8px;">`;
                 } else {
                     iconHTML = `<div class="placed-item-icon-only">${item.image || '🎨'}</div>`;
                 }
             } else {
                 if (item.icon && item.icon.startsWith('uploads/')) {
-                    iconHTML = `<img src="${item.icon}" alt="${item.name}" class="placed-item-icon-only" style="width:100%;height:100%;object-fit:cover;border-radius:8px;">`;
+                    iconHTML = `<img src="${item.icon}" alt="${item.name}" class="placed-item-icon-only" style="width:100%;height:100%;object-fit:contain;border-radius:8px;">`;
                 } else {
                     iconHTML = `<div class="placed-item-icon-only">${item.icon || '📦'}</div>`;
                 }
@@ -1729,6 +1830,20 @@
             document.addEventListener('keydown', (e) => {
                 if (e.key === 'Escape' && selectedItem) {
                     cancelSelection();
+                }
+                // R key to rotate selected item (only if width != height)
+                if ((e.key === 'r' || e.key === 'R') && selectedItem) {
+                    if (selectedItem.width !== selectedItem.height) {
+                        isRotated = !isRotated;
+                        showPlacementInstruction(); // Update instruction text
+                        // Trigger hover preview update
+                        const hoveredCell = document.querySelector('.grid-cell:hover');
+                        if (hoveredCell) {
+                            const x = parseInt(hoveredCell.dataset.x);
+                            const y = parseInt(hoveredCell.dataset.y);
+                            handleGridHover(null, hoveredCell, x, y);
+                        }
+                    }
                 }
             });
             
