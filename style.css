@@ -278,10 +278,31 @@ body {
     border-color: #45a049;
 }
 
+.grid-cell.blocked-truck-cell {
+    background: rgba(228, 13, 13, 0.3);
+    cursor: not-allowed;
+    pointer-events: none;
+}
+
+.grid-cell.blocked-truck-cell:hover {
+    background: rgba(139, 69, 19, 0.3);
+    border-color: #8B4513;
+}
+
 .grid-cell.occupied {
     background: transparent;
     border: none;
     transition: all 0.3s ease;
+}
+
+/* Truck Overlay */
+.truck-overlay {
+    position: absolute;
+    pointer-events: none;
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .grid-cell .cell-content {

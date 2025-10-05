@@ -123,6 +123,10 @@ if ($conn->query($sql) !== TRUE) {
     die("Error creating grid_items table: " . $conn->error);
 }
 
+// Disable automatic seeding by default. Set to true only when you want
+// to populate the database with sample data (e.g. a one-time setup script).
+$seedData = false;
+
 // Sample data for tiles
 $tiles = [
     ['name' => 'Grass', 'image' => '🌿', 'width' => 1, 'height' => 1],
@@ -132,23 +136,26 @@ $tiles = [
     ['name' => 'Water', 'image' => '💧', 'width' => 1, 'height' => 1]
 ];
 
-// Check if tiles table is empty
-$result = $conn->query("SELECT COUNT(*) as count FROM tiles");
-$row = $result->fetch_assoc();
-if ($row['count'] == 0) {
-    // Insert sample tiles
-    $stmt = $conn->prepare("INSERT INTO tiles (name, image, width, height) VALUES (?, ?, ?, ?)");
-    $stmt->bind_param("ssii", $name, $image, $width, $height);
-    
-    foreach ($tiles as $tile) {
-        $name = $tile['name'];
-        $image = $tile['image'];
-        $width = $tile['width'];
-        $height = $tile['height'];
-        $stmt->execute();
+// Optionally seed sample tiles (disabled by default)
+if ($seedData) {
+    // Check if tiles table is empty
+    $result = $conn->query("SELECT COUNT(*) as count FROM tiles");
+    $row = $result->fetch_assoc();
+    if ($row['count'] == 0) {
+        // Insert sample tiles
+        $stmt = $conn->prepare("INSERT INTO tiles (name, image, width, height) VALUES (?, ?, ?, ?)");
+        $stmt->bind_param("ssii", $name, $image, $width, $height);
+
+        foreach ($tiles as $tile) {
+            $name = $tile['name'];
+            $image = $tile['image'];
+            $width = $tile['width'];
+            $height = $tile['height'];
+            $stmt->execute();
+        }
+
+        $stmt->close();
     }
-    
-    $stmt->close();
 }
 
 // Sample data for items (left panel - Available Items)
@@ -163,29 +170,32 @@ $items = [
     ['name' => 'Ring', 'icon' => '💍', 'width' => 1, 'height' => 1, 'quantity' => 8, 'type' => 'Accessory', 'damage' => null, 'defense' => null, 'healing' => null, 'bonus' => '+5 Magic']
 ];
 
-// Check if items table is empty
-$result = $conn->query("SELECT COUNT(*) as count FROM items");
-$row = $result->fetch_assoc();
-if ($row['count'] == 0) {
-    // Insert sample items
-    $stmt = $conn->prepare("INSERT INTO items (name, icon, width, height, quantity, type, damage, defense, healing, bonus) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-    $stmt->bind_param("ssiissiiss", $name, $icon, $width, $height, $quantity, $type, $damage, $defense, $healing, $bonus);
-    
-    foreach ($items as $item) {
-        $name = $item['name'];
-        $icon = $item['icon'];
-        $width = $item['width'];
-        $height = $item['height'];
-        $quantity = $item['quantity'];
-        $type = $item['type'];
-        $damage = $item['damage'];
-        $defense = $item['defense'];
-        $healing = $item['healing'];
-        $bonus = $item['bonus'];
-        $stmt->execute();
+// Optionally seed sample items (disabled by default)
+if ($seedData) {
+    // Check if items table is empty
+    $result = $conn->query("SELECT COUNT(*) as count FROM items");
+    $row = $result->fetch_assoc();
+    if ($row['count'] == 0) {
+        // Insert sample items
+        $stmt = $conn->prepare("INSERT INTO items (name, icon, width, height, quantity, type, damage, defense, healing, bonus) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+        $stmt->bind_param("ssiissiiss", $name, $icon, $width, $height, $quantity, $type, $damage, $defense, $healing, $bonus);
+
+        foreach ($items as $item) {
+            $name = $item['name'];
+            $icon = $item['icon'];
+            $width = $item['width'];
+            $height = $item['height'];
+            $quantity = $item['quantity'];
+            $type = $item['type'];
+            $damage = $item['damage'];
+            $defense = $item['defense'];
+            $healing = $item['healing'];
+            $bonus = $item['bonus'];
+            $stmt->execute();
+        }
+
+        $stmt->close();
     }
-    
-    $stmt->close();
 }
 
 // Sample data for storage
@@ -196,23 +206,26 @@ $storages = [
     ['name' => 'Storage Rack', 'slots' => 12, 'items_per_slot' => 40, 'tiles_needed' => 6]
 ];
 
-// Check if storage table is empty
-$result = $conn->query("SELECT COUNT(*) as count FROM storage");
-$row = $result->fetch_assoc();
-if ($row['count'] == 0) {
-    // Insert sample storage items
-    $stmt = $conn->prepare("INSERT INTO storage (name, slots, items_per_slot, tiles_needed) VALUES (?, ?, ?, ?)");
-    $stmt->bind_param("siii", $name, $slots, $items_per_slot, $tiles_needed);
-    
-    foreach ($storages as $storage) {
-        $name = $storage['name'];
-        $slots = $storage['slots'];
-        $items_per_slot = $storage['items_per_slot'];
-        $tiles_needed = $storage['tiles_needed'];
-        $stmt->execute();
+// Optionally seed sample storage (disabled by default)
+if ($seedData) {
+    // Check if storage table is empty
+    $result = $conn->query("SELECT COUNT(*) as count FROM storage");
+    $row = $result->fetch_assoc();
+    if ($row['count'] == 0) {
+        // Insert sample storage items
+        $stmt = $conn->prepare("INSERT INTO storage (name, slots, items_per_slot, tiles_needed) VALUES (?, ?, ?, ?)");
+        $stmt->bind_param("siii", $name, $slots, $items_per_slot, $tiles_needed);
+
+        foreach ($storages as $storage) {
+            $name = $storage['name'];
+            $slots = $storage['slots'];
+            $items_per_slot = $storage['items_per_slot'];
+            $tiles_needed = $storage['tiles_needed'];
+            $stmt->execute();
+        }
+
+        $stmt->close();
     }
-    
-    $stmt->close();
 }
 
 // Sample data for decorations
@@ -223,23 +236,26 @@ $decorations = [
     ['name' => 'Fence', 'image' => '🧱', 'width' => 3, 'height' => 1]
 ];
 
-// Check if decorations table is empty
-$result = $conn->query("SELECT COUNT(*) as count FROM decorations");
-$row = $result->fetch_assoc();
-if ($row['count'] == 0) {
-    // Insert sample decorations
-    $stmt = $conn->prepare("INSERT INTO decorations (name, image, width, height) VALUES (?, ?, ?, ?)");
-    $stmt->bind_param("ssii", $name, $image, $width, $height);
-    
-    foreach ($decorations as $decoration) {
-        $name = $decoration['name'];
-        $image = $decoration['image'];
-        $width = $decoration['width'];
-        $height = $decoration['height'];
-        $stmt->execute();
+// Optionally seed sample decorations (disabled by default)
+if ($seedData) {
+    // Check if decorations table is empty
+    $result = $conn->query("SELECT COUNT(*) as count FROM decorations");
+    $row = $result->fetch_assoc();
+    if ($row['count'] == 0) {
+        // Insert sample decorations
+        $stmt = $conn->prepare("INSERT INTO decorations (name, image, width, height) VALUES (?, ?, ?, ?)");
+        $stmt->bind_param("ssii", $name, $image, $width, $height);
+
+        foreach ($decorations as $decoration) {
+            $name = $decoration['name'];
+            $image = $decoration['image'];
+            $width = $decoration['width'];
+            $height = $decoration['height'];
+            $stmt->execute();
+        }
+
+        $stmt->close();
     }
-    
-    $stmt->close();
 }
 
 ?>

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Grid Inventory System</title>
+    <title>LDoE Base Layout Designer</title>
     <link rel="stylesheet" href="style.css">
 
 </head>
@@ -11,13 +11,8 @@
     <div class="container">
         <!-- Left Panel -->
         <div class="left-panel">
-            <h2 class="panel-title">Build Tools</h2>
-            
-            <!-- Search Box -->
-            <div class="search-box">
-                <input type="text" id="toolsSearch" placeholder="🔍 Search tools..." oninput="filterItems('tools')">
-            </div>
-            
+            <h2 class="panel-title">Tiles & Storages</h2>
+                        
             <!-- All tools in one grid -->
             <div class="items-grid" id="toolsList">
                 <!-- Tiles, Storage, and Decorations will be loaded here -->
@@ -58,6 +53,13 @@
     </div>
 
     <script>
+        // Silence verbose debug logs (console.log / console.debug) in production runs
+        // To re-enable debug logging, set window.enableDebug = true before this script runs
+        if (!window.enableDebug) {
+            console.log = function() {};
+            console.debug = function() {};
+        }
+
         // All databases will be loaded from MySQL via PHP backend
         let tilesDatabase = [];
         let storageDatabase = [];
@@ -106,7 +108,14 @@
                         cell.classList.add('border-cell');
                         grid[y][x] = { occupied: true, itemId: null, itemType: 'border' };
                     } else {
-                        grid[y][x] = { occupied: false, itemId: null, itemType: null };
+                        // Check if this cell is part of the blocked truck area (x: 13-15, y: 15-18)
+                        const isTruckArea = (x >= 13 && x <= 15 && y >= 15 && y <= 18);
+                        if (isTruckArea) {
+                            cell.classList.add('blocked-truck-cell');
+                            grid[y][x] = { occupied: true, itemId: null, itemType: 'truck-blocked' };
+                        } else {
+                            grid[y][x] = { occupied: false, itemId: null, itemType: null };
+                        }
                     }
                     
                     // Add drop events (keep for backward compatibility)
@@ -127,6 +136,9 @@
                     gridElement.appendChild(cell);
                 }
             }
+            
+            // Add truck overlay to blocked area
+            addTruckOverlay();
             
             // Add grid-level event listeners for better event delegation
             gridElement.addEventListener('dragover', function(e) {
@@ -154,6 +166,39 @@
             });
         }
 
+        // Add truck overlay to blocked grid area
+        function addTruckOverlay() {
+            const gridElement = document.getElementById('grid');
+            const truckOverlay = document.createElement('div');
+            truckOverlay.className = 'truck-overlay';
+            truckOverlay.innerHTML = '<img src="uploads/truck.png" alt="Truck" style="width: 100%; height: 100%; object-fit: contain; transform: rotate(320deg);" draggable="false">';
+            
+            // Position the overlay over cells [13,15] to [15,18]
+            // That's 3 cells wide (13, 14, 15) and 4 cells tall (15, 16, 17, 18)
+            const startCell = document.querySelector('.grid-cell[data-x="13"][data-y="15"]');
+            const endCell = document.querySelector('.grid-cell[data-x="15"][data-y="18"]');
+            
+            if (startCell && endCell) {
+                // Get the actual positions relative to the grid
+                const gridRect = gridElement.getBoundingClientRect();
+                const startRect = startCell.getBoundingClientRect();
+                const endRect = endCell.getBoundingClientRect();
+                
+                // Calculate position and size based on actual cell positions
+                const left = startRect.left - gridRect.left;
+                const top = startRect.top - gridRect.top;
+                const width = endRect.right - startRect.left;
+                const height = endRect.bottom - startRect.top;
+                
+                truckOverlay.style.left = left + 'px';
+                truckOverlay.style.top = top + 'px';
+                truckOverlay.style.width = width + 'px';
+                truckOverlay.style.height = height + 'px';
+            }
+            
+            gridElement.appendChild(truckOverlay);
+        }
+        
         // Click-to-place system handlers
         function handleItemClick(item, element) {
             // Deselect previous item if any
@@ -515,9 +560,9 @@
                 for (let dx = 0; dx < width; dx++) {
                     const cell = grid[y + dy][x + dx];
                     
-                    // Cannot place on border cells
-                    if (cell.itemType === 'border') {
-                        console.log(`✗ Cell [${x+dx},${y+dy}] is a border cell (non-placeable)`);
+                    // Cannot place on border cells or truck-blocked cells
+                    if (cell.itemType === 'border' || cell.itemType === 'truck-blocked') {
+                        console.log(`✗ Cell [${x+dx},${y+dy}] is a ${cell.itemType} cell (non-placeable)`);
                         return false;
                     }
                     
@@ -752,7 +797,7 @@
                         <span>${item.width}x${item.height}</span>
                     </div>
                     <div class="tooltip-row">
-                        <span>Drag to place</span>
+                        <span>Click to select & place</span>
                     </div>
                 `;
             } else if (itemType === 'storage') {
@@ -774,7 +819,7 @@
                         <span>${item.tiles_needed}</span>
                     </div>
                     <div class="tooltip-row">
-                        <span>Drag to place</span>
+                        <span>Click to select & place</span>
                     </div>
                 `;
             } else if (itemType === 'decoration') {
@@ -788,7 +833,7 @@
                         <span>${item.width}x${item.height}</span>
                     </div>
                     <div class="tooltip-row">
-                        <span>Drag to place</span>
+                        <span>Click to select & place</span>
                     </div>
                 `;
             }
