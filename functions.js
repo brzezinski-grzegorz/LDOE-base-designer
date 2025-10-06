@@ -1,0 +1,2546 @@
+﻿// Silence verbose debug logs (console.log / console.debug) in production runs
+// To re-enable debug logging, set window.enableDebug = true before this script runs
+if (!window.enableDebug) {
+    console.log = function() {};
+    console.debug = function() {};
+}
+
+// All databases will be loaded from MySQL via PHP backend
+let tilesDatabase = [];
+let storageDatabase = [];
+let decorationsDatabase = [];
+let workbenchDatabase = [];
+let furnitureDatabase = [];
+let specialDatabase = [];
+
+const GRID_SIZE = 20;
+let grid = [];
+let placedItems = [];
+let draggedItem = null;
+let draggedElement = null;
+let ghostElement = null;
+let isDraggingFromGrid = false; // Track if dragging from grid vs panels
+
+// New: Click-to-place system
+let selectedItem = null; // Currently selected item for placement
+let selectedItemElement = null; // The UI element that was clicked
+let isRotated = false; // Track if selected item is rotated (90 degrees)
+
+// Grid view system
+let currentView = 'full'; // 'full', 'topLeft', 'topRight', 'bottomLeft', 'bottomRight'
+let viewOffset = { x: 0, y: 0 }; // Offset for quadrant views
+let viewSize = 20; // Number of cells to show (20 for full, 10 for quadrants)
+
+// Get current cell size based on view
+function getCellSize() {
+    if (currentView === 'full') {
+        return 40; // Standard size for full grid
+    } else {
+        return 80; // Double size for quadrant views (10x10)
+    }
+}
+
+// Helper function to render image or emoji
+function renderImageOrEmoji(imagePath, altText = '', className = 'item-icon-large') {
+    if (imagePath && imagePath.startsWith('uploads/')) {
+        // It's an uploaded image file
+        return `<img src="${imagePath}" alt="${altText}" class="${className}" style="width:70%;height:70%;object-fit:contain;border-radius:6px;">`;
+    } else {
+        // It's an emoji or text
+        return `<div class="${className}">${imagePath || 'âť“'}</div>`;
+    }
+}
+
+// Set grid view (full or quadrant)
+function setGridView(view) {
+    currentView = view;
+    
+    // Update button states
+    document.querySelectorAll('.btn-quadrant').forEach(btn => btn.classList.remove('active'));
+    document.getElementById('view' + view.charAt(0).toUpperCase() + view.slice(1)).classList.add('active');
+    
+    // Set view parameters
+    if (view === 'full') {
+        viewOffset = { x: 0, y: 0 };
+        viewSize = 20;
+    } else if (view === 'topLeft') {
+        viewOffset = { x: 0, y: 0 };
+        viewSize = 10;
+    } else if (view === 'topRight') {
+        viewOffset = { x: 10, y: 0 };
+        viewSize = 10;
+    } else if (view === 'bottomLeft') {
+        viewOffset = { x: 0, y: 10 };
+        viewSize = 10;
+    } else if (view === 'bottomRight') {
+        viewOffset = { x: 10, y: 10 };
+        viewSize = 10;
+    }
+    
+    // Update grid CSS variables
+    const gridElement = document.getElementById('grid');
+    if (gridElement) {
+        gridElement.style.setProperty('--grid-cols', viewSize);
+        gridElement.style.setProperty('--grid-rows', viewSize);
+        gridElement.style.setProperty('--cell-size', getCellSize() + 'px');
+    }
+    
+    // Reinitialize grid with new view
+    initializeGrid();
+    
+    // Redraw all placed items in the new view
+    redrawPlacedItems();
+}
+
+// Redraw placed items for current view
+function redrawPlacedItems() {
+    // Remove all placed item elements from DOM
+    document.querySelectorAll('.placed-item').forEach(el => el.remove());
+    
+    // Redraw items that are visible in current view
+    placedItems.forEach(placed => {
+        if (placed.item.type === 'tile') return; // Tiles are handled by cell styling
+        
+        const item = placed.item;
+        const x = placed.x;
+        const y = placed.y;
+        
+        // Check if item is at least partially visible in current view
+        const itemEndX = x + item.width - 1;
+        const itemEndY = y + item.height - 1;
+        const viewEndX = viewOffset.x + viewSize - 1;
+        const viewEndY = viewOffset.y + viewSize - 1;
+        
+        if (itemEndX >= viewOffset.x && x <= viewEndX && itemEndY >= viewOffset.y && y <= viewEndY) {
+            // Calculate position relative to current view
+            const relativeX = x - viewOffset.x;
+            const relativeY = y - viewOffset.y;
+            
+            // Only create element if at least part is in view
+            if (relativeX < viewSize && relativeY < viewSize) {
+                createPlacedItemElement(placed, relativeX, relativeY);
+            }
+        }
+    });
+}
+
+// Create a placed item element on the grid
+function createPlacedItemElement(placed, displayX, displayY) {
+    const item = placed.item;
+    const actualX = placed.x;
+    const actualY = placed.y;
+    
+    // Calculate visible dimensions
+    let visibleWidth = item.width;
+    let visibleHeight = item.height;
+    
+    // Adjust if item extends beyond view
+    const viewEndX = viewOffset.x + viewSize;
+    const viewEndY = viewOffset.y + viewSize;
+    
+    if (actualX + item.width > viewEndX) {
+        visibleWidth = viewEndX - actualX;
+    }
+    if (actualY + item.height > viewEndY) {
+        visibleHeight = viewEndY - actualY;
+    }
+    
+    // Don't show if completely outside view
+    if (displayX >= viewSize || displayY >= viewSize || visibleWidth <= 0 || visibleHeight <= 0) {
+        return;
+    }
+    
+    // Adjust display position if item starts before view
+    let adjustedDisplayX = displayX;
+    let adjustedDisplayY = displayY;
+    
+    if (displayX < 0) {
+        visibleWidth += displayX;
+        adjustedDisplayX = 0;
+    }
+    if (displayY < 0) {
+        visibleHeight += displayY;
+        adjustedDisplayY = 0;
+    }
+    
+    const placedElement = document.createElement('div');
+    placedElement.className = `placed-item placed-${item.type}`;
+    const cellSize = getCellSize();
+    const cellWithGap = cellSize + 1;
+    placedElement.style.width = `${visibleWidth * cellSize + (visibleWidth - 1)}px`;
+    placedElement.style.height = `${visibleHeight * cellSize + (visibleHeight - 1)}px`;
+    placedElement.style.left = `${adjustedDisplayX * cellWithGap}px`;
+    placedElement.style.top = `${adjustedDisplayY * cellWithGap}px`;
+    placedElement.draggable = true;
+    placedElement.dataset.itemId = item.id;
+    placedElement.dataset.itemType = item.type;
+    placedElement.dataset.actualX = actualX;
+    placedElement.dataset.actualY = actualY;
+    
+    placedElement.id = placed.element ? placed.element.id : `placed-${item.type}-${item.id}-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+    
+    let iconHTML = '';
+    if (item.type === 'storage') {
+        iconHTML = `<div class="placed-item-icon-only">${renderImageOrEmoji(item.image, item.name)}</div>`;
+    } else if (item.type === 'decoration') {
+        iconHTML = `<div class="placed-item-icon-only">${renderImageOrEmoji(item.image, item.name)}</div>`;
+    } else if (item.type === 'workbench') {
+        iconHTML = `<div class="placed-item-icon-only">${renderImageOrEmoji(item.image, item.name)}</div>`;
+    } else if (item.type === 'furniture') {
+        iconHTML = `<div class="placed-item-icon-only">${renderImageOrEmoji(item.image, item.name)}</div>`;
+    } else if (item.type === 'special') {
+        iconHTML = `<div class="placed-item-icon-only">${renderImageOrEmoji(item.image, item.name)}</div>`;
+    }
+    
+    placedElement.innerHTML = iconHTML;
+    
+    placedElement.addEventListener('dragstart', handleDragStart);
+    placedElement.addEventListener('dragend', handleDragEnd);
+    placedElement.addEventListener('mouseenter', (e) => showTooltip(e, item));
+    placedElement.addEventListener('mouseleave', hideTooltip);
+    placedElement.addEventListener('click', function() {
+        removeItem(placedElement);
+    });
+    
+    document.querySelector('.grid').appendChild(placedElement);
+    
+    // Update the reference
+    placed.element = placedElement;
+}
+
+// Initialize grid
+function initializeGrid() {
+    const gridElement = document.getElementById('grid');
+    gridElement.innerHTML = '';
+    grid = [];
+    
+    // Always maintain full 20x20 grid data
+    for (let y = 0; y < GRID_SIZE; y++) {
+        grid[y] = [];
+        for (let x = 0; x < GRID_SIZE; x++) {
+            grid[y][x] = {
+                occupied: false,
+                itemId: null,
+                itemType: null
+            };
+        }
+    }
+
+    // Display only the cells in current view
+    for (let y = viewOffset.y; y < viewOffset.y + viewSize; y++) {
+        for (let x = viewOffset.x; x < viewOffset.x + viewSize; x++) {
+            const cell = document.createElement('div');
+            cell.className = 'grid-cell';
+            cell.dataset.x = x;
+            cell.dataset.y = y;
+            
+            // Mark border cells (first/last row/column) as non-placeable
+            const isBorderCell = x === 0 || x === GRID_SIZE - 1 || y === 0 || y === GRID_SIZE - 1;
+            if (isBorderCell) {
+                cell.classList.add('border-cell');
+            } else {
+                // Check if this cell is part of the blocked truck area (x: 13-15, y: 15-18)
+                const isTruckArea = (x >= 13 && x <= 15 && y >= 15 && y <= 18);
+                if (isTruckArea) {
+                    cell.classList.add('blocked-truck-cell');
+                }
+            }
+            
+            // Add drop events (keep for backward compatibility)
+            cell.addEventListener('dragover', handleDragOver);
+            cell.addEventListener('drop', handleDrop);
+            cell.addEventListener('dragleave', handleDragLeave);
+            
+            // Add click handler for click-to-place system
+            cell.addEventListener('click', function(e) {
+                handleGridClick(e, cell, x, y);
+            });
+            
+            // Add mouseover for preview
+            cell.addEventListener('mouseover', function(e) {
+                handleGridHover(e, cell, x, y);
+            });
+            
+            gridElement.appendChild(cell);
+        }
+    }
+    
+    // Add truck overlay to blocked area
+    addTruckOverlay();
+    
+    // Add grid-level event listeners for better event delegation
+    gridElement.addEventListener('dragover', function(e) {
+        // If the target is not a grid cell, find the closest one
+        if (!e.target.classList.contains('grid-cell')) {
+            const cell = e.target.closest('.grid-cell');
+            if (cell) {
+                // Forward the event to the proper cell handler
+                const event = new DragEvent('dragover', e);
+                cell.dispatchEvent(event);
+            }
+        }
+    });
+    
+    gridElement.addEventListener('drop', function(e) {
+        // If the target is not a grid cell, find the closest one
+        if (!e.target.classList.contains('grid-cell')) {
+            const cell = e.target.closest('.grid-cell');
+            if (cell) {
+                // Forward the event to the proper cell handler
+                const event = new DragEvent('drop', e);
+                cell.dispatchEvent(event);
+            }
+        }
+    });
+}
+
+// Add truck overlay to blocked grid area
+function addTruckOverlay() {
+    // Only show truck if it's in the current view
+    const truckX = 13, truckY = 15, truckWidth = 3, truckHeight = 4;
+    
+    // Check if truck is visible in current view
+    const viewEndX = viewOffset.x + viewSize;
+    const viewEndY = viewOffset.y + viewSize;
+    
+    if (truckX + truckWidth <= viewOffset.x || truckX >= viewEndX ||
+        truckY + truckHeight <= viewOffset.y || truckY >= viewEndY) {
+        // Truck is not visible in this view
+        return;
+    }
+    
+    const gridElement = document.getElementById('grid');
+    const truckOverlay = document.createElement('div');
+    truckOverlay.className = 'truck-overlay';
+    truckOverlay.innerHTML = '<img src="uploads/truck.png" alt="Truck" style="width: 100%; height: 100%; object-fit: contain; transform: rotate(320deg);" draggable="false">';
+    
+    // Calculate relative position in view
+    const relativeX = Math.max(0, truckX - viewOffset.x);
+    const relativeY = Math.max(0, truckY - viewOffset.y);
+    
+    // Position the overlay over cells [13,15] to [15,18]
+    const startCell = document.querySelector('.grid-cell[data-x="13"][data-y="15"]');
+    const endCell = document.querySelector('.grid-cell[data-x="15"][data-y="18"]');
+    
+    if (startCell && endCell) {
+        // Get the actual positions relative to the grid
+        const gridRect = gridElement.getBoundingClientRect();
+        const startRect = startCell.getBoundingClientRect();
+        const endRect = endCell.getBoundingClientRect();
+        
+        // Calculate position and size based on actual cell positions
+        const left = startRect.left - gridRect.left;
+        const top = startRect.top - gridRect.top;
+        const width = endRect.right - startRect.left;
+        const height = endRect.bottom - startRect.top;
+        
+        truckOverlay.style.left = left + 'px';
+        truckOverlay.style.top = top + 'px';
+        truckOverlay.style.width = width + 'px';
+        truckOverlay.style.height = height + 'px';
+    }
+    
+    gridElement.appendChild(truckOverlay);
+}
+
+// Click-to-place system handlers
+function handleItemClick(item, element) {
+    // Deselect previous item if any
+    if (selectedItemElement) {
+        selectedItemElement.classList.remove('selected');
+    }
+    
+    // Select this item
+    selectedItem = {...item}; // Clone item
+    selectedItem.type = item.type || element.dataset.itemType;
+    selectedItemElement = element;
+    element.classList.add('selected');
+    
+    // Reset rotation when selecting new item
+    isRotated = false;
+    
+    // Add cursor class to body
+    document.body.classList.add('item-selected');
+    
+    console.log('Selected item for placement:', selectedItem.name);
+    
+    // Show instruction
+    showPlacementInstruction();
+}
+
+function handleGridClick(e, cell, x, y) {
+    // If we have a selected item, place it
+    if (selectedItem) {
+        e.stopPropagation();
+        
+        // Use rotated dimensions if item is rotated
+        const width = isRotated ? selectedItem.height : selectedItem.width;
+        const height = isRotated ? selectedItem.width : selectedItem.height;
+        
+        // Check if item can be placed
+        if (canPlaceItem(x, y, width, height, selectedItem.type)) {
+            // Create item with rotated dimensions
+            const itemToPlace = {...selectedItem, width, height, isRotated};
+            placeItem(x, y, itemToPlace);
+            console.log(`âś“ Item placed at [${x},${y}]`);
+            
+            // Don't deselect - allow placing multiple of same item
+            // User can click elsewhere or press ESC to deselect
+        } else {
+            console.log('âś— Cannot place item at this location');
+        }
+        return;
+    }
+    
+    // If no selected item, check if clicking on a tile to remove it
+    if (e.target === cell && grid[y][x].itemType === 'tile') {
+        removeTileFromCell(cell);
+    }
+}
+
+function handleGridHover(e, cell, x, y) {
+    // Clear previous hover previews
+    clearHoverPreviews();
+    
+    // If we have a selected item, show preview
+    if (selectedItem) {
+        const width = isRotated ? selectedItem.height : selectedItem.width;
+        const height = isRotated ? selectedItem.width : selectedItem.height;
+        
+        if (canPlaceItem(x, y, width, height, selectedItem.type)) {
+            highlightArea(x, y, width, height, 'drop-hover');
+        } else {
+            highlightArea(x, y, width, height, 'invalid-drop');
+        }
+    }
+}
+
+function clearHoverPreviews() {
+    document.querySelectorAll('.grid-cell').forEach(cell => {
+        cell.classList.remove('drop-hover', 'invalid-drop', 'preview-left', 'preview-right', 'preview-top', 'preview-bottom');
+        
+        // Remove size indicators
+        const sizeIndicator = cell.querySelector('.size-indicator');
+        if (sizeIndicator) sizeIndicator.remove();
+        
+        // Only clear styling for cells that aren't occupied
+        if (!cell.classList.contains('occupied')) {
+            cell.style.backgroundColor = '';
+            cell.innerHTML = '';
+        }
+    });
+}
+
+function cancelSelection() {
+    if (selectedItemElement) {
+        selectedItemElement.classList.remove('selected');
+    }
+    selectedItem = null;
+    selectedItemElement = null;
+    isRotated = false;
+    clearHoverPreviews();
+    hidePlacementInstruction();
+    document.body.classList.remove('item-selected');
+    console.log('Selection cancelled');
+}
+
+function showPlacementInstruction() {
+    let instruction = document.getElementById('placement-instruction');
+    if (!instruction) {
+        instruction = document.createElement('div');
+        instruction.id = 'placement-instruction';
+        document.body.appendChild(instruction);
+    }
+    
+    // Update instruction text based on item dimensions and rotation state
+    const canRotate = selectedItem && (selectedItem.width !== selectedItem.height);
+    const rotationHint = canRotate ? ' â€˘ Press R to rotate' : '';
+    const rotationStatus = isRotated ? ' đź”„' : '';
+    
+    instruction.innerHTML = `
+        <span>đź“Ť Click on grid to place${rotationStatus}${rotationHint} â€˘ ESC to cancel</span>
+    `;
+    instruction.style.display = 'block';
+}
+
+function hidePlacementInstruction() {
+    const instruction = document.getElementById('placement-instruction');
+    if (instruction) {
+        instruction.style.display = 'none';
+    }
+}
+
+// Load items into left panel
+function handleDragEnd(e) {
+    // Remove dragging class from the element
+    if (e.target.classList.contains('dragging')) {
+        e.target.classList.remove('dragging');
+    }
+    
+    // If we have a draggedElement, remove the dragging class from it too
+    if (draggedElement && draggedElement !== e.target) {
+        draggedElement.classList.remove('dragging');
+    }
+    
+    // If dragging from grid and element still exists (drag was cancelled), restore it
+    if (isDraggingFromGrid && draggedElement && draggedElement.dataset.markedForRemoval === 'true') {
+        console.log('Drag cancelled or failed, restoring item');
+        draggedElement.style.opacity = '1';
+        draggedElement.removeAttribute('data-marked-for-removal');
+        
+        // Restore grid occupation
+        const index = placedItems.findIndex(p => p.element === draggedElement);
+        if (index !== -1) {
+            const item = placedItems[index];
+            for (let dy = 0; dy < item.item.height; dy++) {
+                for (let dx = 0; dx < item.item.width; dx++) {
+                    grid[item.y + dy][item.x + dx].occupied = true;
+                    grid[item.y + dy][item.x + dx].itemId = item.item.id;
+                    grid[item.y + dy][item.x + dx].itemType = item.item.type;
+                }
+            }
+        }
+    }
+    
+    // Reset dragged references
+    draggedItem = null;
+    draggedElement = null;
+    isDraggingFromGrid = false;
+    
+    // Remove ghost element
+    if (ghostElement) {
+        ghostElement.remove();
+        ghostElement = null;
+        document.removeEventListener('mousemove', updateGhostPosition);
+    }
+    
+    // Clear hover states and reset all cell previews
+    document.querySelectorAll('.grid-cell').forEach(cell => {
+        cell.classList.remove('drop-hover', 'invalid-drop');
+        
+        // Only clear styling if cell is not occupied
+        if (!cell.classList.contains('occupied')) {
+            cell.style.backgroundColor = '';
+            cell.innerHTML = '';
+        }
+    });
+    
+    console.log("Drag ended, cleanup complete");
+}
+
+function handleDragOver(e) {
+    e.preventDefault();
+    
+    if (!draggedItem) return;
+    
+    // Get the grid cell, even if we're over a child element
+    const cell = e.target.classList.contains('grid-cell') ? e.target : e.target.closest('.grid-cell');
+    if (!cell || !cell.dataset.x || !cell.dataset.y) return;
+    
+    const x = parseInt(cell.dataset.x);
+    const y = parseInt(cell.dataset.y);
+    
+    // Clear previous hover states and preview styling
+    document.querySelectorAll('.grid-cell').forEach(cell => {
+        cell.classList.remove('drop-hover', 'invalid-drop', 'preview-left', 'preview-right', 'preview-top', 'preview-bottom');
+        
+        // Remove size indicators
+        const sizeIndicator = cell.querySelector('.size-indicator');
+        if (sizeIndicator) sizeIndicator.remove();
+        
+        // Only clear styling for cells that aren't occupied
+        if (!cell.classList.contains('occupied')) {
+            cell.style.backgroundColor = '';
+            cell.innerHTML = '';
+        }
+    });
+    
+    // Check if item can be placed
+    if (canPlaceItem(x, y, draggedItem.width, draggedItem.height, draggedItem.type)) {
+        highlightArea(x, y, draggedItem.width, draggedItem.height, 'drop-hover');
+    } else {
+        highlightArea(x, y, draggedItem.width, draggedItem.height, 'invalid-drop');
+    }
+    
+    // Update ghost position
+    if (ghostElement) {
+        ghostElement.style.left = e.clientX + 'px';
+        ghostElement.style.top = e.clientY + 'px';
+    }
+}
+
+function handleDragLeave(e) {
+    e.target.classList.remove('drop-hover', 'invalid-drop');
+    
+    // Clear any preview styling if not occupied
+    if (!e.target.classList.contains('occupied')) {
+        e.target.style.backgroundColor = '';
+        e.target.innerHTML = '';
+    }
+}
+
+function handleDrop(e) {
+    e.preventDefault();
+    
+    if (!draggedItem) {
+        console.log('No dragged item found');
+        return;
+    }
+    
+    // Get the grid cell, even if we're over a child element
+    const cell = e.target.classList.contains('grid-cell') ? e.target : e.target.closest('.grid-cell');
+    if (!cell || !cell.dataset.x || !cell.dataset.y) {
+        console.log('Drop target is not a valid grid cell');
+        return;
+    }
+    
+    const x = parseInt(cell.dataset.x);
+    const y = parseInt(cell.dataset.y);
+    
+    console.log(`Placing ${draggedItem.type} at [${x},${y}], moving from grid: ${isDraggingFromGrid}`);
+    
+    if (canPlaceItem(x, y, draggedItem.width, draggedItem.height, draggedItem.type)) {
+        // If we were moving from grid, remove the old element now
+        if (isDraggingFromGrid && draggedElement) {
+            const index = placedItems.findIndex(p => p.element === draggedElement);
+            if (index !== -1) {
+                // Remove the old element from DOM
+                draggedElement.remove();
+                // Remove from placedItems array
+                placedItems.splice(index, 1);
+                console.log('Removed old placed item from grid');
+            }
+        }
+        
+        // Place the item at the new location
+        placeItem(x, y, draggedItem);
+        console.log(`âś“ Item placed successfully`);
+    } else {
+        console.log('âś— Cannot place item at this location - space occupied or out of bounds');
+        
+        // If we were dragging from grid and can't place, restore the old item
+        if (isDraggingFromGrid && draggedElement) {
+            console.log('Restoring item to original position');
+            // Restore opacity
+            draggedElement.style.opacity = '1';
+            // Find the original position and restore grid area
+            const originalIndex = placedItems.findIndex(p => p.element === draggedElement);
+            if (originalIndex !== -1) {
+                const item = placedItems[originalIndex];
+                // Re-mark the grid as occupied
+                for (let dy = 0; dy < item.item.height; dy++) {
+                    for (let dx = 0; dx < item.item.width; dx++) {
+                        grid[item.y + dy][item.x + dx].occupied = true;
+                        grid[item.y + dy][item.x + dx].itemId = item.item.id;
+                        grid[item.y + dy][item.x + dx].itemType = item.item.type;
+                    }
+                }
+            }
+        }
+    }
+    
+    // Clear hover states and preview styles
+    document.querySelectorAll('.grid-cell').forEach(cell => {
+        cell.classList.remove('drop-hover', 'invalid-drop');
+        if (!cell.classList.contains('occupied')) {
+            cell.style.backgroundColor = '';
+            cell.innerHTML = '';
+        }
+    });
+    
+    // Reset dragged item reference
+    draggedItem = null;
+    draggedElement = null;
+}
+
+// Ghost element for dragging - small compact version for easy placement
+function createGhostElement(item) {
+    ghostElement = document.createElement('div');
+    ghostElement.className = 'ghost-item-compact';
+    
+    // Create a small compact ghost - just icon and size info
+    let iconHTML = '';
+    if (item.type === 'tile') {
+        if (item.image && item.image.startsWith('uploads/')) {
+            iconHTML = `<img src="${item.image}" alt="${item.name}" style="width:100%;height:100%;object-fit:cover;border-radius:6px;">`;
+        } else {
+            iconHTML = item.image || 'đźź©';
+        }
+    } else if (item.type === 'storage') {
+        if (item.image && item.image.startsWith('uploads/')) {
+            iconHTML = `<img src="${item.image}" alt="${item.name}" style="width:100%;height:100%;object-fit:cover;border-radius:6px;">`;
+        } else {
+            iconHTML = item.image || 'đź“¦';
+        }
+    } else if (item.type === 'decoration') {
+        if (item.image && item.image.startsWith('uploads/')) {
+            iconHTML = `<img src="${item.image}" alt="${item.name}" style="width:100%;height:100%;object-fit:cover;border-radius:6px;">`;
+        } else {
+            iconHTML = item.image || 'đźŽ¨';
+        }
+    } else {
+        if (item.icon && item.icon.startsWith('uploads/')) {
+            iconHTML = `<img src="${item.icon}" alt="${item.name}" style="width:100%;height:100%;object-fit:cover;border-radius:6px;">`;
+        } else {
+            iconHTML = item.icon || 'đź“¦';
+        }
+    }
+    
+    ghostElement.innerHTML = `
+        <div class="compact-ghost-content">
+            <div class="compact-icon">${iconHTML}</div>
+            <div class="compact-size">${item.width}Ă—${item.height}</div>
+        </div>
+    `;
+    
+    document.body.appendChild(ghostElement);
+    
+    // Update position on mouse move
+    document.addEventListener('mousemove', updateGhostPosition);
+}
+
+function updateGhostPosition(e) {
+    if (ghostElement) {
+        ghostElement.style.left = e.clientX + 'px';
+        ghostElement.style.top = e.clientY + 'px';
+    }
+}
+
+// Grid manipulation functions
+function canPlaceItem(x, y, width, height, itemType) {
+    // Ensure all values are numbers
+    x = parseInt(x);
+    y = parseInt(y);
+    width = parseInt(width);
+    height = parseInt(height);
+    
+    if (x + width > GRID_SIZE || y + height > GRID_SIZE) {
+        console.log(`âś— Out of bounds: ${x}+${width}=${x+width} > ${GRID_SIZE} or ${y}+${height}=${y+height} > ${GRID_SIZE}`);
+        return false;
+    }
+    
+    for (let dy = 0; dy < height; dy++) {
+        for (let dx = 0; dx < width; dx++) {
+            const cell = grid[y + dy][x + dx];
+            
+            // Cannot place on border cells or truck-blocked cells
+            if (cell.itemType === 'border' || cell.itemType === 'truck-blocked') {
+                console.log(`âś— Cell [${x+dx},${y+dy}] is a ${cell.itemType} cell (non-placeable)`);
+                return false;
+            }
+            
+            // Tiles are background only - allow items, storage, decorations to be placed on them
+            if (cell.occupied && cell.itemType !== 'tile') {
+                console.log(`âś— Cell [${x+dx},${y+dy}] is occupied by ${cell.itemType}`);
+                return false;
+            }
+            
+            // If placing a tile, check if there's already a tile
+            if (itemType === 'tile' && cell.itemType === 'tile') {
+                console.log(`âś— Cell [${x+dx},${y+dy}] already has a tile`);
+                return false;
+            }
+        }
+    }
+    
+    console.log(`âś“ Can place item at [${x},${y}]`);
+    return true;
+}
+
+function clearGridArea(x, y, width, height, keepTiles = true) {
+    for (let dy = 0; dy < height; dy++) {
+        for (let dx = 0; dx < width; dx++) {
+            if (y + dy < GRID_SIZE && x + dx < GRID_SIZE) {
+                const cell = document.querySelector(`.grid-cell[data-x="${x + dx}"][data-y="${y + dy}"]`);
+                
+                // If keepTiles is true and this is a tile, preserve it
+                if (keepTiles && grid[y + dy][x + dx].itemType === 'tile') {
+                    // Only clear the occupied status for non-tile items
+                    // Keep the tile background color and data
+                    grid[y + dy][x + dx].occupied = true; // Keep as occupied by tile
+                    // Don't change itemId or itemType for tiles
+                    continue;
+                }
+                
+                // Clear everything (for non-tiles or when keepTiles is false)
+                grid[y + dy][x + dx].occupied = false;
+                grid[y + dy][x + dx].itemId = null;
+                grid[y + dy][x + dx].itemType = null;
+                
+                if (cell) {
+                    cell.classList.remove('occupied');
+                    cell.style.backgroundColor = '';
+                    cell.innerHTML = '';
+                }
+            }
+        }
+    }
+}
+
+// Remove an item from the grid
+function removeItem(element) {
+    const index = placedItems.findIndex(p => p.element === element);
+    if (index !== -1) {
+        const placedItem = placedItems[index];
+        clearGridArea(placedItem.x, placedItem.y, placedItem.item.width, placedItem.item.height);
+        element.remove();
+        placedItems.splice(index, 1);
+        console.log('Item removed from grid');
+    }
+}
+
+// Remove a tile (which has no element, just background color)
+function removeTileFromCell(cell) {
+    const x = parseInt(cell.dataset.x);
+    const y = parseInt(cell.dataset.y);
+    
+    // Find and remove from placedItems
+    const index = placedItems.findIndex(p => p.x === x && p.y === y && p.item.type === 'tile');
+    if (index !== -1) {
+        placedItems.splice(index, 1);
+    }
+    
+    // Clear grid data and styling
+    grid[y][x].occupied = false;
+    grid[y][x].itemId = null;
+    grid[y][x].itemType = null;
+    cell.classList.remove('occupied');
+    cell.style.backgroundColor = '';
+    cell.removeAttribute('data-tile-name');
+    console.log('Tile removed from cell', x, y);
+}
+
+function highlightArea(x, y, width, height, className) {
+    for (let dy = 0; dy < height; dy++) {
+        for (let dx = 0; dx < width; dx++) {
+            if (y + dy < GRID_SIZE && x + dx < GRID_SIZE) {
+                const cell = document.querySelector(`.grid-cell[data-x="${x + dx}"][data-y="${y + dy}"]`);
+                if (cell) {
+                    cell.classList.add(className);
+                    
+                    // Add border classes to show the item boundary
+                    if (dx === 0) cell.classList.add('preview-left');
+                    if (dx === width - 1) cell.classList.add('preview-right');
+                    if (dy === 0) cell.classList.add('preview-top');
+                    if (dy === height - 1) cell.classList.add('preview-bottom');
+                    
+                    // If we're showing a valid drop and it's a tile, show a preview
+                    if (className === 'drop-hover' && draggedItem && draggedItem.type === 'tile') {
+                        cell.style.backgroundColor = draggedItem.color || getTileColor(draggedItem.name);
+                        if (draggedItem.image) {
+                            cell.innerHTML = `<div class="cell-content preview">${draggedItem.image}</div>`;
+                        }
+                    }
+                    
+                    // Show size indicator on the top-left cell
+                    if (className === 'drop-hover' && dx === 0 && dy === 0 && (width > 1 || height > 1)) {
+                        const sizeIndicator = document.createElement('div');
+                        sizeIndicator.className = 'size-indicator';
+                        sizeIndicator.textContent = `${width}Ă—${height}`;
+                        cell.appendChild(sizeIndicator);
+                    }
+                }
+            }
+        }
+    }
+}
+
+// Tooltip functions
+function showTooltip(e, item) {
+    const tooltip = document.getElementById('tooltip');
+    const tooltipTitle = document.getElementById('tooltipTitle');
+    const tooltipInfo = document.getElementById('tooltipInfo');
+    
+    tooltipTitle.textContent = item.name;
+    
+    let infoHTML = `
+        <div class="tooltip-row">
+            <span>Type:</span>
+            <span>${item.type}</span>
+        </div>
+        <div class="tooltip-row">
+            <span>Quantity:</span>
+            <span>${item.quantity}</span>
+        </div>
+        <div class="tooltip-row">
+            <span>Size:</span>
+            <span>${item.width}x${item.height}</span>
+        </div>
+    `;
+    
+    if (item.damage) {
+        infoHTML += `
+            <div class="tooltip-row">
+                <span>Damage:</span>
+                <span>${item.damage}</span>
+            </div>
+        `;
+    }
+    
+    if (item.defense) {
+        infoHTML += `
+            <div class="tooltip-row">
+                <span>Defense:</span>
+                <span>${item.defense}</span>
+            </div>
+        `;
+    }
+    
+    if (item.healing) {
+        infoHTML += `
+            <div class="tooltip-row">
+                <span>Healing:</span>
+                <span>${item.healing}</span>
+            </div>
+        `;
+    }
+    
+    if (item.bonus) {
+        infoHTML += `
+            <div class="tooltip-row">
+                <span>Bonus:</span>
+                <span>${item.bonus}</span>
+            </div>
+        `;
+    }
+    
+    tooltipInfo.innerHTML = infoHTML;
+    
+    // Position tooltip
+    const rect = e.target.getBoundingClientRect();
+    tooltip.style.left = rect.right + 10 + 'px';
+    tooltip.style.top = rect.top + 'px';
+    
+    // Adjust if tooltip goes off screen
+    if (rect.right + 170 > window.innerWidth) {
+        tooltip.style.left = rect.left - 170 + 'px';
+    }
+    
+    tooltip.classList.add('show');
+}
+
+function hideTooltip() {
+    const tooltip = document.getElementById('tooltip');
+    tooltip.classList.remove('show');
+}
+
+// Function to get appropriate color based on tile name
+function getTileColor(tileName) {
+    // Define colors for different tile types
+    const tileColors = {
+        'Grass': '#7CBA59',
+        'Stone': '#A0A0A0',
+        'Wood': '#BA8C63',
+        'Dirt': '#8B5A2B',
+        'Water': '#4A90E2'
+    };
+    
+    // Return the color based on tile name, or a default if not found
+    return tileColors[tileName] || '#CCCCCC';
+}
+
+// Show tooltip when hovering over items in the Build Tools panels
+function showTooltipPreview(e, item, itemType) {
+    const tooltip = document.getElementById('tooltip');
+    const tooltipTitle = document.getElementById('tooltipTitle');
+    const tooltipInfo = document.getElementById('tooltipInfo');
+    
+    tooltipTitle.textContent = item.name;
+    
+    let infoHTML = '';
+    
+    if (itemType === 'tile') {
+        infoHTML = `
+            <div class="tooltip-row">
+                <span>Type:</span>
+                <span>Tile</span>
+            </div>
+            <div class="tooltip-row">
+                <span>Size:</span>
+                <span>${item.width}x${item.height}</span>
+            </div>
+            <div class="tooltip-row">
+                <span>Click to select & place</span>
+            </div>
+        `;
+    } else if (itemType === 'storage') {
+        infoHTML = `
+            <div class="tooltip-row">
+                <span>Type:</span>
+                <span>Storage</span>
+            </div>
+            <div class="tooltip-row">
+                <span>Slots:</span>
+                <span>${item.slots}</span>
+            </div>
+            <div class="tooltip-row">
+                <span>Items per slot:</span>
+                <span>${item.items_per_slot}</span>
+            </div>
+            <div class="tooltip-row">
+                <span>Tiles needed:</span>
+                <span>${item.tiles_needed}</span>
+            </div>
+            <div class="tooltip-row">
+                <span>Click to select & place</span>
+            </div>
+        `;
+    } else if (itemType === 'decoration') {
+        infoHTML = `
+            <div class="tooltip-row">
+                <span>Type:</span>
+                <span>Decoration</span>
+            </div>
+            <div class="tooltip-row">
+                <span>Size:</span>
+                <span>${item.width}x${item.height}</span>
+            </div>
+            <div class="tooltip-row">
+                <span>Click to select & place</span>
+            </div>
+        `;
+    } else if (itemType === 'workbench') {
+        infoHTML = `
+            <div class="tooltip-row">
+                <span>Type:</span>
+                <span>Workbench</span>
+            </div>
+            <div class="tooltip-row">
+                <span>Tiles needed:</span>
+                <span>${item.tiles_needed}</span>
+            </div>
+            <div class="tooltip-row">
+                <span>Click to select & place</span>
+            </div>
+        `;
+    } else if (itemType === 'furniture') {
+        infoHTML = `
+            <div class="tooltip-row">
+                <span>Type:</span>
+                <span>Furniture</span>
+            </div>
+            <div class="tooltip-row">
+                <span>Tiles needed:</span>
+                <span>${item.tiles_needed}</span>
+            </div>
+            <div class="tooltip-row">
+                <span>Click to select & place</span>
+            </div>
+        `;
+    } else if (itemType === 'special') {
+        infoHTML = `
+            <div class="tooltip-row">
+                <span>Type:</span>
+                <span>Special</span>
+            </div>
+            <div class="tooltip-row">
+                <span>Tiles needed:</span>
+                <span>${item.tiles_needed}</span>
+            </div>
+            <div class="tooltip-row">
+                <span>Click to select & place</span>
+            </div>
+        `;
+    }
+    
+    tooltipInfo.innerHTML = infoHTML;
+    
+    // Position tooltip
+    const rect = e.target.getBoundingClientRect();
+    tooltip.style.left = rect.right + 10 + 'px';
+    tooltip.style.top = rect.top + 'px';
+    
+    // Adjust if tooltip goes off screen
+    if (rect.right + 170 > window.innerWidth) {
+        tooltip.style.left = rect.left - 170 + 'px';
+    }
+    
+    tooltip.classList.add('show');
+}
+
+function clearGrid() {
+    // Remove all placed-item elements from the DOM
+    document.querySelectorAll('.placed-item').forEach(element => {
+        element.remove();
+    });
+    
+    // Clear the placedItems array
+    placedItems = [];
+    
+    // Reset grid
+    for (let y = 0; y < GRID_SIZE; y++) {
+        for (let x = 0; x < GRID_SIZE; x++) {
+            grid[y][x].occupied = false;
+            grid[y][x].itemId = null;
+            grid[y][x].itemType = null;
+            
+            const cell = document.querySelector(`.grid-cell[data-x="${x}"][data-y="${y}"]`);
+            if (cell) {
+                // Reset all cell styling
+                cell.classList.remove('occupied', 'drop-hover', 'invalid-drop');
+                cell.style.backgroundColor = '';
+                cell.style.display = '';
+                cell.innerHTML = '';
+                cell.removeAttribute('data-tile-type');
+            }
+        }
+    }
+    
+    console.log("Grid cleared, placedItems length:", placedItems.length);
+}
+
+// Clear grid and also delete from database
+async function clearGridAndDatabase() {
+    showConfirm(
+        'Clear Layout?',
+        'Are you sure you want to clear the entire grid? This will remove all placed items.',
+        () => {
+            // Clear local grid
+            clearGrid();
+            
+            // Show success notification after grid is cleared
+            showModal('success', 'Grid Cleared!', 'All items have been removed from the grid.');
+            console.log('Grid cleared successfully');
+        }
+    );
+}
+
+// Load tiles, storage and decorations from database
+async function loadTilesDatabase() {
+    try {
+        const response = await fetch('getItems.php?type=tiles');
+        const data = await response.json();
+        
+        // Check for API errors
+        if (data.error) {
+            console.error('âš ď¸Ź DATABASE ERROR:', data.message || data.error);
+            if (data.message && data.message.includes('setup_database.php')) {
+                console.error('đź“‹ SOLUTION: Open http://localhost/LDOE-base-designer/setup_database.php in your browser');
+            }
+            return;
+        }
+        
+        // Ensure we have a valid array
+        if (Array.isArray(data)) {
+            tilesDatabase = data;
+            console.log('âś“ Tiles loaded:', tilesDatabase.length);
+            checkAndLoadTools();
+        } else {
+            console.warn('Invalid tiles data.');
+        }
+    } catch (error) {
+        console.error('Error loading tiles:', error);
+    }
+}
+
+async function loadStorageDatabase() {
+    try {
+        const response = await fetch('getItems.php?type=storage');
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        const data = await response.json();
+        
+        // Ensure we have a valid array
+        if (Array.isArray(data)) {
+            // Calculate width and height for each storage item
+            data.forEach(storage => {
+                storage.width = Math.ceil(Math.sqrt(storage.tiles_needed));
+                storage.height = Math.ceil(storage.tiles_needed / storage.width);
+            });
+            storageDatabase = data;
+            console.log('Storage items loaded:', storageDatabase.length);
+            checkAndLoadTools();
+        } else {
+            // If database is not available, use fallback data
+            console.warn('Invalid storage data.');
+        }
+    } catch (error) {
+        console.error('Error loading storage items.', error);
+    }
+}
+
+async function loadDecorationsDatabase() {
+    try {
+        const response = await fetch('getItems.php?type=decorations');
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        const data = await response.json();
+        
+        // Ensure we have a valid array
+        if (Array.isArray(data)) {
+            decorationsDatabase = data;
+            console.log('Decorations loaded:', decorationsDatabase.length);
+            checkAndLoadTools();
+        } else {
+            // If database is not available, use fallback data
+            console.warn('Invalid decorations data.');
+        }
+    } catch (error) {
+        console.error('Error loading decorations.', error);
+    }
+}
+
+async function loadWorkbenchDatabase() {
+    try {
+        const response = await fetch('getItems.php?type=workbench');
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        const data = await response.json();
+        
+        if (Array.isArray(data)) {
+            workbenchDatabase = data;
+            console.log('Workbench loaded:', workbenchDatabase.length);
+            checkAndLoadTools();
+        } else {
+            console.warn('Invalid workbench data.');
+        }
+    } catch (error) {
+        console.error('Error loading workbench.', error);
+    }
+}
+
+async function loadFurnitureDatabase() {
+    try {
+        const response = await fetch('getItems.php?type=furniture');
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        const data = await response.json();
+        
+        if (Array.isArray(data)) {
+            furnitureDatabase = data;
+            console.log('Furniture loaded:', furnitureDatabase.length);
+            checkAndLoadTools();
+        } else {
+            console.warn('Invalid furniture data.');
+        }
+    } catch (error) {
+        console.error('Error loading furniture.', error);
+    }
+}
+
+async function loadSpecialDatabase() {
+    try {
+        const response = await fetch('getItems.php?type=special');
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        const data = await response.json();
+        
+        if (Array.isArray(data)) {
+            specialDatabase = data;
+            console.log('Special loaded:', specialDatabase.length);
+            checkAndLoadTools();
+        } else {
+            console.warn('Invalid special data.');
+        }
+    } catch (error) {
+        console.error('Error loading special.', error);
+    }
+}
+
+// Load tiles into tiles panel
+// Load all tools (tiles, storage, decorations, workbench, furniture, special) into their respective grids
+function loadToolsList() {
+    const toolsList = document.getElementById('toolsList');
+    const storageGrid = document.getElementById('storageGrid');
+    const decorationsGrid = document.getElementById('decorationsGrid');
+    const workbenchGrid = document.getElementById('workbenchGrid');
+    const furnitureGrid = document.getElementById('furnitureGrid');
+    const specialGrid = document.getElementById('specialGrid');
+
+    // Clear existing
+    if (toolsList) toolsList.innerHTML = '';
+    if (storageGrid) storageGrid.innerHTML = '';
+    if (decorationsGrid) decorationsGrid.innerHTML = '';
+    if (workbenchGrid) workbenchGrid.innerHTML = '';
+    if (furnitureGrid) furnitureGrid.innerHTML = '';
+    if (specialGrid) specialGrid.innerHTML = '';
+
+    // Load tiles into left panel
+    tilesDatabase.forEach(tile => {
+        const tileElement = document.createElement('div');
+        tileElement.className = 'draggable-item compact tile-item';
+        tileElement.draggable = true;
+        tileElement.dataset.itemType = 'tile';
+        tileElement.dataset.itemId = tile.id;
+        tileElement.dataset.itemName = tile.name.toLowerCase();
+        tileElement.dataset.category = 'tile';
+        
+        tileElement.innerHTML = `
+            <div class="item-name-top">${tile.name}</div>
+            ${renderImageOrEmoji(tile.image, tile.name, 'item-icon-large')}
+            <div class="item-size-bottom">${tile.width}Ă—${tile.height}</div>
+        `;
+
+        tileElement.addEventListener('click', () => handleItemClick(tile, tileElement));
+        tileElement.addEventListener('dragstart', handleDragStart);
+        tileElement.addEventListener('dragend', handleDragEnd);
+        tileElement.addEventListener('mouseenter', (e) => showTooltipPreview(e, tile, 'tile'));
+        tileElement.addEventListener('mouseleave', hideTooltip);
+        
+        if (toolsList) toolsList.appendChild(tileElement);
+    });
+
+    // Load storage into storage grid
+    storageDatabase.forEach(storage => {
+        const storageElement = document.createElement('div');
+        storageElement.className = 'draggable-item compact storage-item';
+        storageElement.draggable = true;
+        storageElement.dataset.itemType = 'storage';
+        storageElement.dataset.itemId = storage.id;
+        storageElement.dataset.itemName = storage.name.toLowerCase();
+        storageElement.dataset.category = 'storage';
+        
+        // Calculate width and height based on tiles_needed
+        const tilesNeeded = storage.tiles_needed || 1;
+        // Find optimal rectangular dimensions (prefer wider rectangles)
+        let width = Math.ceil(Math.sqrt(tilesNeeded));
+        let height = Math.ceil(tilesNeeded / width);
+        // Adjust if the product is less than tilesNeeded
+        while (width * height < tilesNeeded) {
+            width++;
+            height = Math.ceil(tilesNeeded / width);
+        }
+        storage.width = width;
+        storage.height = height;
+        
+        // Check if item can be rotated (not square)
+        const canRotate = storage.width !== storage.height;
+        const rotateBtn = canRotate ? '<div class="rotation-btn" title="Rotate (R key)">đź”„</div>' : '';
+        
+        storageElement.innerHTML = `
+            ${rotateBtn}
+            <div class="item-name-top">${storage.name}</div>
+            ${renderImageOrEmoji(storage.image, storage.name, 'item-icon-large')}
+            <div class="item-size-bottom">${storage.tiles_needed} tiles</div>
+        `;
+
+        storageElement.addEventListener('click', () => handleItemClick(storage, storageElement));
+        storageElement.addEventListener('dragstart', handleDragStart);
+        storageElement.addEventListener('dragend', handleDragEnd);
+        storageElement.addEventListener('mouseenter', (e) => showTooltipPreview(e, storage, 'storage'));
+        storageElement.addEventListener('mouseleave', hideTooltip);
+        
+        // Add rotation button click handler
+        if (canRotate) {
+            const btn = storageElement.querySelector('.rotation-btn');
+            if (btn) {
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    handleItemClick(storage, storageElement);
+                    isRotated = !isRotated;
+                    showPlacementInstruction();
+                });
+            }
+        }
+        
+        if (storageGrid) storageGrid.appendChild(storageElement);
+    });
+
+    // Load decorations into decorations grid
+    decorationsDatabase.forEach(decoration => {
+        const decorationElement = document.createElement('div');
+        decorationElement.className = 'draggable-item compact decoration-item';
+        decorationElement.draggable = true;
+        decorationElement.dataset.itemType = 'decoration';
+        decorationElement.dataset.itemId = decoration.id;
+        decorationElement.dataset.itemName = decoration.name.toLowerCase();
+        decorationElement.dataset.category = 'decoration';
+        
+        // Check if item can be rotated (not square)
+        const canRotate = decoration.width !== decoration.height;
+        const rotateBtn = canRotate ? '<div class="rotation-btn" title="Rotate (R key)">đź”„</div>' : '';
+        
+        decorationElement.innerHTML = `
+            ${rotateBtn}
+            <div class="item-name-top">${decoration.name}</div>
+            ${renderImageOrEmoji(decoration.image, decoration.name, 'item-icon-large')}
+            <div class="item-size-bottom">${decoration.width}Ă—${decoration.height}</div>
+        `;
+
+        decorationElement.addEventListener('click', () => handleItemClick(decoration, decorationElement));
+        decorationElement.addEventListener('dragstart', handleDragStart);
+        decorationElement.addEventListener('dragend', handleDragEnd);
+        decorationElement.addEventListener('mouseenter', (e) => showTooltipPreview(e, decoration, 'decoration'));
+        decorationElement.addEventListener('mouseleave', hideTooltip);
+        
+        // Add rotation button click handler
+        if (canRotate) {
+            const btn = decorationElement.querySelector('.rotation-btn');
+            if (btn) {
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    handleItemClick(decoration, decorationElement);
+                    isRotated = !isRotated;
+                    showPlacementInstruction();
+                });
+            }
+        }
+        
+        if (decorationsGrid) decorationsGrid.appendChild(decorationElement);
+    });
+
+    // Load workbench into workbench grid
+    workbenchDatabase.forEach(workbench => {
+        const workbenchElement = document.createElement('div');
+        workbenchElement.className = 'draggable-item compact workbench-item';
+        workbenchElement.draggable = true;
+        workbenchElement.dataset.itemType = 'workbench';
+        workbenchElement.dataset.itemId = workbench.id;
+        workbenchElement.dataset.itemName = workbench.name.toLowerCase();
+        workbenchElement.dataset.category = 'workbench';
+        
+        // Calculate width and height based on tiles_needed
+        const tilesNeeded = workbench.tiles_needed || 1;
+        // Find optimal rectangular dimensions (prefer wider rectangles)
+        let width = Math.ceil(Math.sqrt(tilesNeeded));
+        let height = Math.ceil(tilesNeeded / width);
+        // Adjust if the product is less than tilesNeeded
+        while (width * height < tilesNeeded) {
+            width++;
+            height = Math.ceil(tilesNeeded / width);
+        }
+        workbench.width = width;
+        workbench.height = height;
+        
+        // Check if item can be rotated (not square)
+        const canRotate = workbench.width !== workbench.height;
+        const rotateBtn = canRotate ? '<div class="rotation-btn" title="Rotate (R key)">đź”„</div>' : '';
+        
+        workbenchElement.innerHTML = `
+            ${rotateBtn}
+            <div class="item-name-top">${workbench.name}</div>
+            ${renderImageOrEmoji(workbench.image, workbench.name, 'item-icon-large')}
+            <div class="item-size-bottom">${workbench.tiles_needed} tiles</div>
+        `;
+
+        workbenchElement.addEventListener('click', () => handleItemClick(workbench, workbenchElement));
+        workbenchElement.addEventListener('dragstart', handleDragStart);
+        workbenchElement.addEventListener('dragend', handleDragEnd);
+        workbenchElement.addEventListener('mouseenter', (e) => showTooltipPreview(e, workbench, 'workbench'));
+        workbenchElement.addEventListener('mouseleave', hideTooltip);
+        
+        // Add rotation button click handler
+        if (canRotate) {
+            const btn = workbenchElement.querySelector('.rotation-btn');
+            if (btn) {
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    handleItemClick(workbench, workbenchElement);
+                    isRotated = !isRotated;
+                    showPlacementInstruction();
+                });
+            }
+        }
+        
+        if (workbenchGrid) workbenchGrid.appendChild(workbenchElement);
+    });
+
+    // Load furniture into furniture grid
+    furnitureDatabase.forEach(furniture => {
+        const furnitureElement = document.createElement('div');
+        furnitureElement.className = 'draggable-item compact furniture-item';
+        furnitureElement.draggable = true;
+        furnitureElement.dataset.itemType = 'furniture';
+        furnitureElement.dataset.itemId = furniture.id;
+        furnitureElement.dataset.itemName = furniture.name.toLowerCase();
+        furnitureElement.dataset.category = 'furniture';
+        
+        // Calculate width and height based on tiles_needed
+        const tilesNeeded = furniture.tiles_needed || 1;
+        // Find optimal rectangular dimensions (prefer wider rectangles)
+        let width = Math.ceil(Math.sqrt(tilesNeeded));
+        let height = Math.ceil(tilesNeeded / width);
+        // Adjust if the product is less than tilesNeeded
+        while (width * height < tilesNeeded) {
+            width++;
+            height = Math.ceil(tilesNeeded / width);
+        }
+        furniture.width = width;
+        furniture.height = height;
+        
+        // Check if item can be rotated (not square)
+        const canRotate = furniture.width !== furniture.height;
+        const rotateBtn = canRotate ? '<div class="rotation-btn" title="Rotate (R key)">đź”„</div>' : '';
+        
+        furnitureElement.innerHTML = `
+            ${rotateBtn}
+            <div class="item-name-top">${furniture.name}</div>
+            ${renderImageOrEmoji(furniture.image, furniture.name, 'item-icon-large')}
+            <div class="item-size-bottom">${furniture.tiles_needed} tiles</div>
+        `;
+
+        furnitureElement.addEventListener('click', () => handleItemClick(furniture, furnitureElement));
+        furnitureElement.addEventListener('dragstart', handleDragStart);
+        furnitureElement.addEventListener('dragend', handleDragEnd);
+        furnitureElement.addEventListener('mouseenter', (e) => showTooltipPreview(e, furniture, 'furniture'));
+        furnitureElement.addEventListener('mouseleave', hideTooltip);
+        
+        // Add rotation button click handler
+        if (canRotate) {
+            const btn = furnitureElement.querySelector('.rotation-btn');
+            if (btn) {
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    handleItemClick(furniture, furnitureElement);
+                    isRotated = !isRotated;
+                    showPlacementInstruction();
+                });
+            }
+        }
+        
+        if (furnitureGrid) furnitureGrid.appendChild(furnitureElement);
+    });
+
+    // Load special into special grid
+    specialDatabase.forEach(special => {
+        const specialElement = document.createElement('div');
+        specialElement.className = 'draggable-item compact special-item';
+        specialElement.draggable = true;
+        specialElement.dataset.itemType = 'special';
+        specialElement.dataset.itemId = special.id;
+        specialElement.dataset.itemName = special.name.toLowerCase();
+        specialElement.dataset.category = 'special';
+        
+        // Calculate width and height based on tiles_needed
+        const tilesNeeded = special.tiles_needed || 1;
+        // Find optimal rectangular dimensions (prefer wider rectangles)
+        let width = Math.ceil(Math.sqrt(tilesNeeded));
+        let height = Math.ceil(tilesNeeded / width);
+        // Adjust if the product is less than tilesNeeded
+        while (width * height < tilesNeeded) {
+            width++;
+            height = Math.ceil(tilesNeeded / width);
+        }
+        special.width = width;
+        special.height = height;
+        
+        // Check if item can be rotated (not square)
+        const canRotate = special.width !== special.height;
+        const rotateBtn = canRotate ? '<div class="rotation-btn" title="Rotate (R key)">đź”„</div>' : '';
+        
+        specialElement.innerHTML = `
+            ${rotateBtn}
+            <div class="item-name-top">${special.name}</div>
+            ${renderImageOrEmoji(special.image, special.name, 'item-icon-large')}
+            <div class="item-size-bottom">${special.tiles_needed} tiles</div>
+        `;
+
+        specialElement.addEventListener('click', () => handleItemClick(special, specialElement));
+        specialElement.addEventListener('dragstart', handleDragStart);
+        specialElement.addEventListener('dragend', handleDragEnd);
+        specialElement.addEventListener('mouseenter', (e) => showTooltipPreview(e, special, 'special'));
+        specialElement.addEventListener('mouseleave', hideTooltip);
+        
+        // Add rotation button click handler
+        if (canRotate) {
+            const btn = specialElement.querySelector('.rotation-btn');
+            if (btn) {
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    handleItemClick(special, specialElement);
+                    isRotated = !isRotated;
+                    showPlacementInstruction();
+                });
+            }
+        }
+        
+        if (specialGrid) specialGrid.appendChild(specialElement);
+    });
+}
+
+function loadTilesList() {
+    const tilesList = document.getElementById('tilesList');
+    tilesList.innerHTML = '';
+
+    tilesDatabase.forEach(tile => {
+        const tileElement = document.createElement('div');
+        tileElement.className = 'draggable-item tile-item';
+        tileElement.draggable = true;
+        tileElement.dataset.itemType = 'tile';
+        tileElement.dataset.itemId = tile.id;
+        
+        tileElement.innerHTML = `
+            <div class="item-icon">${tile.image}</div>
+            <div class="item-info">
+                <div class="item-name">${tile.name}</div>
+                <div class="item-size">${tile.width}x${tile.height}</div>
+            </div>
+        `;
+
+        // Click-to-place handler
+        tileElement.addEventListener('click', () => handleItemClick(tile, tileElement));
+        
+        // Keep drag-and-drop for backward compatibility
+        tileElement.addEventListener('dragstart', handleDragStart);
+        tileElement.addEventListener('dragend', handleDragEnd);
+        tileElement.addEventListener('mouseenter', (e) => showTooltipPreview(e, tile, 'tile'));
+        tileElement.addEventListener('mouseleave', hideTooltip);
+        
+        tilesList.appendChild(tileElement);
+    });
+}
+
+// Load storage items into storage panel
+function loadStorageList() {
+    const storageList = document.getElementById('storageList');
+    storageList.innerHTML = '';
+
+    storageDatabase.forEach(storage => {
+        const storageElement = document.createElement('div');
+        storageElement.className = 'draggable-item storage-item';
+        storageElement.draggable = true;
+        storageElement.dataset.itemType = 'storage';
+        storageElement.dataset.itemId = storage.id;
+        
+        storageElement.innerHTML = `
+            <div class="item-icon">đź“¦</div>
+            <div class="item-info">
+                <div class="item-name">${storage.name}</div>
+                <div class="item-size">Slots: ${storage.slots} â€˘ Items/slot: ${storage.items_per_slot}</div>
+                <div class="item-size">Tiles needed: ${storage.tiles_needed}</div>
+            </div>
+        `;
+
+        // Click-to-place handler
+        storageElement.addEventListener('click', () => handleItemClick(storage, storageElement));
+        
+        // Keep drag-and-drop for backward compatibility
+        storageElement.addEventListener('dragstart', handleDragStart);
+        storageElement.addEventListener('dragend', handleDragEnd);
+        storageElement.addEventListener('mouseenter', (e) => showTooltipPreview(e, storage, 'storage'));
+        storageElement.addEventListener('mouseleave', hideTooltip);
+        
+        storageList.appendChild(storageElement);
+    });
+}
+
+// Load decorations into decorations panel
+function loadDecorationsList() {
+    const decorationsList = document.getElementById('decorationsList');
+    decorationsList.innerHTML = '';
+
+    decorationsDatabase.forEach(decoration => {
+        const decorationElement = document.createElement('div');
+        decorationElement.className = 'draggable-item decoration-item';
+        decorationElement.draggable = true;
+        decorationElement.dataset.itemType = 'decoration';
+        decorationElement.dataset.itemId = decoration.id;
+        
+        decorationElement.innerHTML = `
+            <div class="item-icon">${decoration.image}</div>
+            <div class="item-info">
+                <div class="item-name">${decoration.name}</div>
+                <div class="item-size">${decoration.width}x${decoration.height}</div>
+            </div>
+        `;
+
+        // Click-to-place handler
+        decorationElement.addEventListener('click', () => handleItemClick(decoration, decorationElement));
+        
+        // Keep drag-and-drop for backward compatibility
+        decorationElement.addEventListener('dragstart', handleDragStart);
+        decorationElement.addEventListener('dragend', handleDragEnd);
+        decorationElement.addEventListener('mouseenter', (e) => showTooltipPreview(e, decoration, 'decoration'));
+        decorationElement.addEventListener('mouseleave', hideTooltip);
+        
+        decorationsList.appendChild(decorationElement);
+    });
+}
+
+// Filter items based on search input
+function filterItems(panelType) {
+    const searchInput = document.getElementById('toolsSearch').value.toLowerCase();
+    const container = document.getElementById('toolsList');
+    const items = container.querySelectorAll('.draggable-item');
+    
+    items.forEach(item => {
+        const itemName = item.dataset.itemName || '';
+        const category = item.dataset.category || '';
+        const searchText = itemName + ' ' + category;
+        
+        if (searchText.includes(searchInput)) {
+            item.style.display = '';
+        } else {
+            item.style.display = 'none';
+        }
+    });
+}
+
+// Check if all databases loaded, then load tools
+let toolsLoadAttempts = 0;
+function checkAndLoadTools() {
+    toolsLoadAttempts++;
+    if (tilesDatabase.length > 0 && storageDatabase.length > 0 && decorationsDatabase.length > 0 && 
+        workbenchDatabase.length > 0 && furnitureDatabase.length > 0 && specialDatabase.length > 0) {
+        loadToolsList();
+    } else if (toolsLoadAttempts >= 6) {
+        // All six databases should have tried loading by now
+        loadToolsList(); // Load whatever we have
+    }
+}
+
+// Setup collapsible sections functionality
+function setupCollapsibleSections() {
+    const headers = document.querySelectorAll('.collapsible-header');
+    
+    headers.forEach(header => {
+        header.addEventListener('click', () => {
+            // Toggle active class on header
+            header.classList.toggle('active');
+            
+            // Get the corresponding content element (next sibling)
+            const content = header.nextElementSibling;
+            
+            // Toggle show class on content
+            content.classList.toggle('show');
+            
+            // Update the icon
+            const icon = header.querySelector('.collapsible-icon');
+            if (header.classList.contains('active')) {
+                icon.textContent = 'â–Ľ';
+            } else {
+                icon.textContent = 'â–ş';
+            }
+        });
+    });
+}
+
+// Filter function for right-panel search box
+function filterRightItems() {
+    const q = document.getElementById('rightSearch').value.trim().toLowerCase();
+    // Get all grid containers in the right panel
+    const grids = ['storageGrid', 'decorationsGrid', 'workbenchGrid', 'furnitureGrid', 'specialGrid'];
+    
+    grids.forEach(gridId => {
+        const container = document.getElementById(gridId);
+        if (!container) return;
+        container.querySelectorAll('.draggable-item').forEach(item => {
+            const name = (item.dataset.itemName || '').toLowerCase();
+            if (name.includes(q)) {
+                item.style.display = '';
+            } else {
+                item.style.display = 'none';
+            }
+        });
+    });
+}
+
+// Update drag and drop handlers for new item types
+function handleDragStart(e) {
+    // Check if the event target is the draggable item or its child element
+    const draggableElement = e.target.closest('.draggable-item') || e.target.closest('.placed-item');
+    
+    if (!draggableElement) return;
+    
+    const itemType = draggableElement.dataset.itemType;
+    const itemId = parseInt(draggableElement.dataset.itemId);
+    
+    console.log("Drag started on item type:", itemType, "with ID:", itemId);
+    
+    if (itemType === 'tile') {
+        draggedItem = tilesDatabase.find(item => parseInt(item.id) === itemId);
+        if (draggedItem) {
+            draggedItem = {...draggedItem}; // Clone to avoid modifying original
+            draggedItem.type = 'tile';
+            draggedItem.id = parseInt(draggedItem.id);
+            draggedItem.width = parseInt(draggedItem.width);
+            draggedItem.height = parseInt(draggedItem.height);
+        } else {
+            console.error("Tile not found with ID:", itemId);
+            return;
+        }
+    } else if (itemType === 'storage') {
+        draggedItem = storageDatabase.find(item => parseInt(item.id) === itemId);
+        if (draggedItem) {
+            draggedItem = {...draggedItem}; // Clone to avoid modifying original
+            draggedItem.type = 'storage';
+            draggedItem.id = parseInt(draggedItem.id);
+            draggedItem.slots = parseInt(draggedItem.slots);
+            draggedItem.items_per_slot = parseInt(draggedItem.items_per_slot);
+            draggedItem.tiles_needed = parseInt(draggedItem.tiles_needed);
+            // Set size for storage items based on tiles needed
+            let width = Math.ceil(Math.sqrt(draggedItem.tiles_needed));
+            let height = Math.ceil(draggedItem.tiles_needed / width);
+            while (width * height < draggedItem.tiles_needed) {
+                width++;
+                height = Math.ceil(draggedItem.tiles_needed / width);
+            }
+            draggedItem.width = width;
+            draggedItem.height = height;
+        } else {
+            console.error("Storage not found with ID:", itemId);
+            return;
+        }
+    } else if (itemType === 'decoration') {
+        draggedItem = decorationsDatabase.find(item => parseInt(item.id) === itemId);
+        if (draggedItem) {
+            draggedItem = {...draggedItem}; // Clone to avoid modifying original
+            draggedItem.type = 'decoration';
+            draggedItem.id = parseInt(draggedItem.id);
+            draggedItem.width = parseInt(draggedItem.width);
+            draggedItem.height = parseInt(draggedItem.height);
+        } else {
+            console.error("Decoration not found with ID:", itemId);
+            return;
+        }
+    } else if (itemType === 'workbench') {
+        draggedItem = workbenchDatabase.find(item => parseInt(item.id) === itemId);
+        if (draggedItem) {
+            draggedItem = {...draggedItem}; // Clone to avoid modifying original
+            draggedItem.type = 'workbench';
+            draggedItem.id = parseInt(draggedItem.id);
+            draggedItem.tiles_needed = parseInt(draggedItem.tiles_needed);
+            // Set size based on tiles needed
+            let width = Math.ceil(Math.sqrt(draggedItem.tiles_needed));
+            let height = Math.ceil(draggedItem.tiles_needed / width);
+            while (width * height < draggedItem.tiles_needed) {
+                width++;
+                height = Math.ceil(draggedItem.tiles_needed / width);
+            }
+            draggedItem.width = width;
+            draggedItem.height = height;
+        } else {
+            console.error("Workbench not found with ID:", itemId);
+            return;
+        }
+    } else if (itemType === 'furniture') {
+        draggedItem = furnitureDatabase.find(item => parseInt(item.id) === itemId);
+        if (draggedItem) {
+            draggedItem = {...draggedItem}; // Clone to avoid modifying original
+            draggedItem.type = 'furniture';
+            draggedItem.id = parseInt(draggedItem.id);
+            draggedItem.tiles_needed = parseInt(draggedItem.tiles_needed);
+            // Set size based on tiles needed
+            let width = Math.ceil(Math.sqrt(draggedItem.tiles_needed));
+            let height = Math.ceil(draggedItem.tiles_needed / width);
+            while (width * height < draggedItem.tiles_needed) {
+                width++;
+                height = Math.ceil(draggedItem.tiles_needed / width);
+            }
+            draggedItem.width = width;
+            draggedItem.height = height;
+        } else {
+            console.error("Furniture not found with ID:", itemId);
+            return;
+        }
+    } else if (itemType === 'special') {
+        draggedItem = specialDatabase.find(item => parseInt(item.id) === itemId);
+        if (draggedItem) {
+            draggedItem = {...draggedItem}; // Clone to avoid modifying original
+            draggedItem.type = 'special';
+            draggedItem.id = parseInt(draggedItem.id);
+            draggedItem.tiles_needed = parseInt(draggedItem.tiles_needed);
+            // Set size based on tiles needed
+            let width = Math.ceil(Math.sqrt(draggedItem.tiles_needed));
+            let height = Math.ceil(draggedItem.tiles_needed / width);
+            while (width * height < draggedItem.tiles_needed) {
+                width++;
+                height = Math.ceil(draggedItem.tiles_needed / width);
+            }
+            draggedItem.width = width;
+            draggedItem.height = height;
+        } else {
+            console.error("Special not found with ID:", itemId);
+            return;
+        }
+    } else {
+        console.error("Unknown item type:", itemType);
+        return;
+    }
+    
+    console.log('Successfully found and set draggedItem:', draggedItem);
+    console.log('Item properties - width:', draggedItem.width, 'height:', draggedItem.height, 'type:', typeof draggedItem.width);
+    
+    draggedElement = draggableElement;
+    
+    // Check if this is being dragged from the grid (placed item) or from panels
+    if (draggableElement.classList.contains('placed-item')) {
+        isDraggingFromGrid = true;
+        console.log('Dragging FROM GRID - will move item');
+        // Mark item for removal but don't remove yet (in case drop fails)
+        const index = placedItems.findIndex(p => p.element === draggableElement);
+        if (index !== -1) {
+            const placedItem = placedItems[index];
+            console.log('Marking item for removal from grid at:', placedItem.x, placedItem.y);
+            // Clear grid area so we can place elsewhere
+            clearGridArea(placedItem.x, placedItem.y, 
+                        placedItem.item.width, placedItem.item.height);
+            
+            // Hide the element during drag
+            draggableElement.style.opacity = '0.3';
+            
+            // Mark for removal (will be removed on successful drop)
+            draggableElement.dataset.markedForRemoval = 'true';
+        }
+    } else {
+        isDraggingFromGrid = false;
+        console.log('Dragging FROM PANEL - will place new item');
+    }
+    
+    draggableElement.classList.add('dragging');
+    
+    // Create ghost element
+    createGhostElement(draggedItem);
+}
+
+// Update placeItem function to handle new item types
+function placeItem(x, y, item) {
+    // TILES: Just change background color, don't create overlay element
+    if (item.type === 'tile') {
+        // Only occupy a single cell for tiles (always 1x1)
+        grid[y][x].occupied = true;
+        grid[y][x].itemId = item.id;
+        grid[y][x].itemType = 'tile';
+        
+        const cell = document.querySelector(`.grid-cell[data-x="${x}"][data-y="${y}"]`);
+        cell.classList.add('occupied');
+        cell.style.backgroundColor = item.color || getTileColor(item.name);
+        cell.setAttribute('data-tile-name', item.name);
+        // Don't add any text or overlay for tiles
+        cell.innerHTML = '';
+        
+        // Store in placedItems for save/load but don't create DOM element
+        placedItems.push({
+            item: item,
+            x: x,
+            y: y,
+            element: null // No DOM element for tiles
+        });
+        
+        return; // Early return for tiles
+    }
+    
+    // NON-TILES: Items, Storage, Decorations - create overlay elements
+    // Mark grid cells as occupied
+    for (let dy = 0; dy < item.height; dy++) {
+        for (let dx = 0; dx < item.width; dx++) {
+            grid[y + dy][x + dx].occupied = true;
+            grid[y + dy][x + dx].itemId = item.id;
+            grid[y + dy][x + dx].itemType = item.type;
+            
+            const cell = document.querySelector(`.grid-cell[data-x="${x + dx}"][data-y="${y + dy}"]`);
+            cell.classList.add('occupied');
+            // Don't modify background for non-tile items
+            cell.innerHTML = '';
+        }
+    }
+    
+    // Create placed item element (only icon, no text)
+    const placedElement = document.createElement('div');
+    placedElement.className = `placed-item placed-${item.type}`;
+    const cellSize = getCellSize();
+    const cellWithGap = cellSize + 1;
+    placedElement.style.width = `${item.width * cellSize + (item.width - 1)}px`;
+    placedElement.style.height = `${item.height * cellSize + (item.height - 1)}px`;
+    placedElement.style.left = `${x * cellWithGap}px`;
+    placedElement.style.top = `${y * cellWithGap}px`;
+    placedElement.draggable = true;
+    placedElement.dataset.itemId = item.id;
+    placedElement.dataset.itemType = item.type;
+    
+    // Storage and Decorations are fully transparent - no background, only image visible
+    // This allows tiles underneath to show through perfectly
+    
+    // Add a unique ID to help with tracking
+    placedElement.id = `placed-${item.type}-${item.id}-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+    
+    // Only show icon, no text/name - support both images and emoji
+    let iconHTML = '';
+    if (item.type === 'storage') {
+        if (item.image && item.image.startsWith('uploads/')) {
+            iconHTML = `<img src="${item.image}" alt="${item.name}" class="placed-item-icon-only" style="width:100%;height:100%;object-fit:contain;border-radius:8px;">`;
+        } else {
+            iconHTML = `<div class="placed-item-icon-only">${item.image || 'đź“¦'}</div>`;
+        }
+    } else if (item.type === 'decoration') {
+        if (item.image && item.image.startsWith('uploads/')) {
+            iconHTML = `<img src="${item.image}" alt="${item.name}" class="placed-item-icon-only" style="width:100%;height:100%;object-fit:contain;border-radius:8px;">`;
+        } else {
+            iconHTML = `<div class="placed-item-icon-only">${item.image || 'đźŽ¨'}</div>`;
+        }
+    } else if (item.type === 'workbench') {
+        if (item.image && item.image.startsWith('uploads/')) {
+            iconHTML = `<img src="${item.image}" alt="${item.name}" class="placed-item-icon-only" style="width:100%;height:100%;object-fit:contain;border-radius:8px;">`;
+        } else {
+            iconHTML = `<div class="placed-item-icon-only">${item.image || 'đź”¨'}</div>`;
+        }
+    } else if (item.type === 'furniture') {
+        if (item.image && item.image.startsWith('uploads/')) {
+            iconHTML = `<img src="${item.image}" alt="${item.name}" class="placed-item-icon-only" style="width:100%;height:100%;object-fit:contain;border-radius:8px;">`;
+        } else {
+            iconHTML = `<div class="placed-item-icon-only">${item.image || 'đźŞ‘'}</div>`;
+        }
+    } else if (item.type === 'special') {
+        if (item.image && item.image.startsWith('uploads/')) {
+            iconHTML = `<img src="${item.image}" alt="${item.name}" class="placed-item-icon-only" style="width:100%;height:100%;object-fit:contain;border-radius:8px;">`;
+        } else {
+            iconHTML = `<div class="placed-item-icon-only">${item.image || 'â­'}</div>`;
+        }
+    } else {
+        if (item.icon && item.icon.startsWith('uploads/')) {
+            iconHTML = `<img src="${item.icon}" alt="${item.name}" class="placed-item-icon-only" style="width:100%;height:100%;object-fit:contain;border-radius:8px;">`;
+        } else {
+            iconHTML = `<div class="placed-item-icon-only">${item.icon || 'đź“¦'}</div>`;
+        }
+    }
+    
+    placedElement.innerHTML = iconHTML;
+    
+    // Add drag events
+    placedElement.addEventListener('dragstart', handleDragStart);
+    placedElement.addEventListener('dragend', handleDragEnd);
+    
+    // Add tooltip events
+    placedElement.addEventListener('mouseenter', (e) => showTooltip(e, item));
+    placedElement.addEventListener('mouseleave', hideTooltip);
+    
+    // Click to remove
+    placedElement.addEventListener('click', function() {
+        removeItem(placedElement);
+    });
+    
+    document.querySelector('.grid').appendChild(placedElement);
+    
+    // Store placed item
+    placedItems.push({
+        item: item,
+        x: x,
+        y: y,
+        element: placedElement
+    });
+}
+
+// Update showTooltip function to handle new item types
+function showTooltip(e, item) {
+    const tooltip = document.getElementById('tooltip');
+    const tooltipTitle = document.getElementById('tooltipTitle');
+    const tooltipInfo = document.getElementById('tooltipInfo');
+    
+    tooltipTitle.textContent = item.name;
+    
+    let infoHTML = '';
+    
+    if (item.type === 'tile') {
+        infoHTML = `
+            <div class="tooltip-row">
+                <span>Type:</span>
+                <span>Tile</span>
+            </div>
+            <div class="tooltip-row">
+                <span>Size:</span>
+                <span>${item.width}x${item.height}</span>
+            </div>
+        `;
+    } else if (item.type === 'storage') {
+        infoHTML = `
+            <div class="tooltip-row">
+                <span>Type:</span>
+                <span>Storage</span>
+            </div>
+            <div class="tooltip-row">
+                <span>Slots:</span>
+                <span>${item.slots}</span>
+            </div>
+            <div class="tooltip-row">
+                <span>Items per slot:</span>
+                <span>${item.items_per_slot}</span>
+            </div>
+            <div class="tooltip-row">
+                <span>Tiles needed:</span>
+                <span>${item.tiles_needed}</span>
+            </div>
+        `;
+    } else if (item.type === 'decoration') {
+        infoHTML = `
+            <div class="tooltip-row">
+                <span>Type:</span>
+                <span>Decoration</span>
+            </div>
+            <div class="tooltip-row">
+                <span>Size:</span>
+                <span>${item.width}x${item.height}</span>
+            </div>
+        `;
+    } else {
+        // Original items
+        infoHTML = `
+            <div class="tooltip-row">
+                <span>Type:</span>
+                <span>${item.type}</span>
+            </div>
+            <div class="tooltip-row">
+                <span>Quantity:</span>
+                <span>${item.quantity}</span>
+            </div>
+            <div class="tooltip-row">
+                <span>Size:</span>
+                <span>${item.width}x${item.height}</span>
+            </div>
+        `;
+        
+        if (item.damage) {
+            infoHTML += `
+                <div class="tooltip-row">
+                    <span>Damage:</span>
+                    <span>${item.damage}</span>
+                </div>
+            `;
+        }
+        
+        if (item.defense) {
+            infoHTML += `
+                <div class="tooltip-row">
+                    <span>Defense:</span>
+                    <span>${item.defense}</span>
+                </div>
+            `;
+        }
+        
+        if (item.healing) {
+            infoHTML += `
+                <div class="tooltip-row">
+                    <span>Healing:</span>
+                    <span>${item.healing}</span>
+                </div>
+            `;
+        }
+        
+        if (item.bonus) {
+            infoHTML += `
+                <div class="tooltip-row">
+                    <span>Bonus:</span>
+                    <span>${item.bonus}</span>
+                </div>
+            `;
+        }
+    }
+    
+    tooltipInfo.innerHTML = infoHTML;
+    
+    // Position tooltip
+    const rect = e.target.getBoundingClientRect();
+    tooltip.style.left = rect.right + 10 + 'px';
+    tooltip.style.top = rect.top + 'px';
+    
+    // Adjust if tooltip goes off screen
+    if (rect.right + 170 > window.innerWidth) {
+        tooltip.style.left = rect.left - 170 + 'px';
+    }
+    
+    tooltip.classList.add('show');
+}
+
+// Save grid to JSON file on user's PC
+function saveGrid() {
+    const saveData = {
+        version: '1.0',
+        timestamp: new Date().toISOString(),
+        gridSize: GRID_SIZE,
+        items: placedItems.map(p => ({
+            itemId: p.item.id,
+            itemType: p.item.type,
+            itemName: p.item.name,
+            x: p.x,
+            y: p.y,
+            width: p.item.width,
+            height: p.item.height
+        }))
+    };
+    
+    try {
+        // Convert to JSON string with pretty formatting
+        const jsonString = JSON.stringify(saveData, null, 2);
+        
+        // Create blob and download link
+        const blob = new Blob([jsonString], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        
+        // Generate filename with timestamp
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+        a.download = `ldoe-base-layout-${timestamp}.json`;
+        
+        // Trigger download
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        
+        // Show success notification after file is saved
+        setTimeout(() => {
+            showModal('success', 'Layout Saved!', `Grid layout saved successfully with ${saveData.items.length} items.`);
+        }, 100);
+        console.log('Grid saved:', saveData.items.length, 'items');
+    } catch (error) {
+        console.error('Error saving grid:', error);
+        showModal('error', 'Save Failed', 'Error saving grid: ' + error.message);
+    }
+}
+
+// Load grid from JSON file selected by user
+function loadGrid() {
+    // Trigger file input click
+    const fileInput = document.getElementById('gridFileInput');
+    if (!fileInput) {
+        showModal('error', 'Error', 'File input not found');
+        return;
+    }
+    fileInput.click();
+}
+
+// Handle file selection and load grid data
+function handleGridFileLoad(event) {
+    const file = event.target.files[0];
+    if (!file) {
+        return;
+    }
+    
+    // Verify it's a JSON file
+    if (!file.name.endsWith('.json')) {
+        showModal('error', 'Invalid File', 'Please select a valid JSON file');
+        return;
+    }
+    
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            const saveData = JSON.parse(e.target.result);
+            
+            // Validate save data structure
+            if (!saveData.items || !Array.isArray(saveData.items)) {
+                throw new Error('Invalid save file format: missing items array');
+            }
+            
+            // Check if databases are loaded
+            if (tilesDatabase.length === 0 || storageDatabase.length === 0 || 
+                decorationsDatabase.length === 0 || workbenchDatabase.length === 0 ||
+                furnitureDatabase.length === 0 || specialDatabase.length === 0) {
+                showModal('error', 'Not Ready', 'Item databases not loaded yet. Please wait a moment and try again.');
+                return;
+            }
+            
+            // Clear current grid
+            clearGrid();
+            
+            // Sort items so tiles are placed first (background layer), then other items on top
+            const sortedItems = [...saveData.items].sort((a, b) => {
+                if (a.itemType === 'tile' && b.itemType !== 'tile') return -1;
+                if (a.itemType !== 'tile' && b.itemType === 'tile') return 1;
+                return 0;
+            });
+            
+            // Recreate placed items from save file
+            let loadedCount = 0;
+            let errorCount = 0;
+            
+            for (const savedItem of sortedItems) {
+                let item;
+                let database;
+                
+                // Select the appropriate database
+                if (savedItem.itemType === 'tile') {
+                    database = tilesDatabase;
+                } else if (savedItem.itemType === 'storage') {
+                    database = storageDatabase;
+                } else if (savedItem.itemType === 'decoration') {
+                    database = decorationsDatabase;
+                } else if (savedItem.itemType === 'workbench') {
+                    database = workbenchDatabase;
+                } else if (savedItem.itemType === 'furniture') {
+                    database = furnitureDatabase;
+                } else if (savedItem.itemType === 'special') {
+                    database = specialDatabase;
+                }
+                
+                if (database) {
+                    // Try to find by ID first
+                    item = database.find(i => i.id === parseInt(savedItem.itemId));
+                    
+                    // If not found by ID, try to find by name (fallback for when IDs change)
+                    if (!item && savedItem.itemName) {
+                        item = database.find(i => i.name === savedItem.itemName);
+                        if (item) {
+                            console.log(`Found item by name instead of ID: ${savedItem.itemName}`);
+                        }
+                    }
+                    
+                    if (item) {
+                        item = {...item}; // Clone the item
+                        item.type = savedItem.itemType;
+                        
+                        // Calculate dimensions for items with tiles_needed
+                        if (savedItem.itemType === 'storage' || savedItem.itemType === 'workbench' || 
+                            savedItem.itemType === 'furniture' || savedItem.itemType === 'special') {
+                            const tilesNeeded = item.tiles_needed || 1;
+                            item.width = Math.ceil(Math.sqrt(tilesNeeded));
+                            item.height = Math.ceil(tilesNeeded / item.width);
+                            while (item.width * item.height < tilesNeeded) {
+                                item.height++;
+                            }
+                        }
+                    }
+                }
+                
+                if (item) {
+                    placeItem(parseInt(savedItem.x), parseInt(savedItem.y), item);
+                    loadedCount++;
+                } else {
+                    console.warn('Could not find item by ID or name:', savedItem);
+                    errorCount++;
+                }
+            }
+            
+            console.log('Grid loaded successfully:', loadedCount, 'items placed');
+            
+            if (errorCount > 0) {
+                showModal('warning', 'Layout Loaded', `Grid loaded with ${loadedCount} items.\n${errorCount} items could not be found in the database.`);
+            } else {
+                showModal('success', 'Layout Loaded!', `Grid layout loaded successfully with ${loadedCount} items.`);
+            }
+            
+        } catch (error) {
+            console.error('Error loading grid from file:', error);
+            showModal('error', 'Load Failed', 'Error loading grid file: ' + error.message);
+        }
+    };
+    
+    reader.onerror = function() {
+        showModal('error', 'Read Error', 'Error reading file');
+    };
+    
+    reader.readAsText(file);
+    
+    // Reset file input so the same file can be loaded again
+    event.target.value = '';
+}
+
+// Modal notification functions
+function showModal(type, title, message) {
+    const modal = document.getElementById('modalOverlay');
+    const icon = document.getElementById('modalIcon');
+    const titleEl = document.getElementById('modalTitle');
+    const messageEl = document.getElementById('modalMessage');
+    const btn = document.getElementById('modalBtn');
+    
+    // Set content
+    titleEl.textContent = title;
+    messageEl.textContent = message;
+    
+    // Set icon and color based on type
+    if (type === 'success') {
+        icon.textContent = 'âś“';
+        icon.style.background = 'linear-gradient(135deg, #4CAF50 0%, #45a049 100%)';
+    } else if (type === 'error') {
+        icon.textContent = 'âś•';
+        icon.style.background = 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)';
+    } else if (type === 'warning') {
+        icon.textContent = 'âš ';
+        icon.style.background = 'linear-gradient(135deg, #ff9800 0%, #f57c00 100%)';
+    }
+    
+    // Show modal
+    modal.classList.add('show');
+    
+    // Focus button for keyboard accessibility
+    setTimeout(() => btn.focus(), 100);
+}
+
+function closeModal() {
+    const modal = document.getElementById('modalOverlay');
+    modal.classList.remove('show');
+}
+
+// Show confirmation modal
+function showConfirm(title, message, onConfirm) {
+    const modal = document.getElementById('confirmOverlay');
+    const icon = document.getElementById('confirmIcon');
+    const titleEl = document.getElementById('confirmTitle');
+    const messageEl = document.getElementById('confirmMessage');
+    const okBtn = document.getElementById('confirmOkBtn');
+    
+    titleEl.textContent = title;
+    messageEl.textContent = message;
+    icon.textContent = 'âš ';
+    icon.style.background = 'linear-gradient(135deg, #ff9800 0%, #f57c00 100%)';
+    
+    // Set up confirm button click handler
+    okBtn.onclick = () => {
+        closeConfirm();
+        onConfirm();
+    };
+    
+    // Show modal
+    modal.classList.add('show');
+    
+    // Focus cancel button for safety
+    setTimeout(() => document.getElementById('confirmCancelBtn').focus(), 100);
+}
+
+function closeConfirm() {
+    const modal = document.getElementById('confirmOverlay');
+    modal.classList.remove('show');
+}
+
+// Function to clean up any inconsistencies in the grid state
+function cleanupGridState() {
+    // Check for any ghost elements and remove them
+    const ghostElements = document.querySelectorAll('.ghost-item');
+    ghostElements.forEach(element => element.remove());
+    
+    // Remove any stray dragging classes
+    document.querySelectorAll('.dragging').forEach(element => {
+        element.classList.remove('dragging');
+    });
+    
+    // Make sure the grid state is consistent with placed items
+    let placedItemsIds = placedItems.map(p => p.element.id);
+    
+    // Find placed items that aren't tracked in the placedItems array
+    document.querySelectorAll('.placed-item').forEach(element => {
+        const elementId = element.id;
+        if (!elementId || !placedItemsIds.includes(elementId)) {
+            console.log('Found untracked placed item, removing:', element);
+            element.remove();
+        }
+    });
+    
+    // Reset drag state
+    draggedItem = null;
+    draggedElement = null;
+    
+    console.log('Grid state cleaned up');
+}
+
+// Setup right panel tabs
+function setupRightPanelTabs() {
+    const tabs = document.querySelectorAll('.right-tab');
+    const tabContents = document.querySelectorAll('.tab-content');
+    
+    tabs.forEach(tab => {
+        tab.addEventListener('click', () => {
+            // Remove active class from all tabs
+            tabs.forEach(t => t.classList.remove('active'));
+            // Add active class to clicked tab
+            tab.classList.add('active');
+            
+            // Hide all tab contents
+            tabContents.forEach(content => content.classList.remove('active'));
+            // Show the selected tab content
+            const targetTab = tab.dataset.tab;
+            const targetContent = document.getElementById(`tab-${targetTab}`);
+            if (targetContent) {
+                targetContent.classList.add('active');
+            }
+        });
+    });
+}
+
+// Fetch visit counts from server
+// function fetchVisitCounts() {
+//     fetch('visit_counter.php')
+//         .then(res => res.json())
+//         .then(data => {
+//             const loading = document.getElementById('visitCounterLoading');
+//             const content = document.getElementById('visitCounterContent');
+//             const vcUnique = document.getElementById('vcUnique');
+//             const vcReturning = document.getElementById('vcReturning');
+//             const vcTotal = document.getElementById('vcTotal');
+//             if (loading) loading.style.display = 'none';
+//             if (content) content.style.display = 'block';
+//             if (vcUnique) vcUnique.textContent = data.unique_visitors ?? 0;
+//             if (vcReturning) vcReturning.textContent = data.returning_visitors ?? 0;
+//             if (vcTotal) vcTotal.textContent = data.total_visits ?? 0;
+//         })
+//         .catch(err => {
+//             console.error('Error fetching visit counts', err);
+//         });
+// }
+
+// Initialize on load
+document.addEventListener('DOMContentLoaded', () => {
+    // Set initial grid size CSS variables
+    const gridElement = document.getElementById('grid');
+    if (gridElement) {
+        gridElement.style.setProperty('--grid-cols', viewSize);
+        gridElement.style.setProperty('--grid-rows', viewSize);
+        gridElement.style.setProperty('--cell-size', getCellSize() + 'px');
+    }
+    
+    // Set full view as active by default
+    const fullViewBtn = document.getElementById('viewFull');
+    if (fullViewBtn) {
+        fullViewBtn.classList.add('active');
+    }
+    
+    initializeGrid();
+    
+    // Load all databases
+    loadTilesDatabase();
+    loadStorageDatabase();
+    loadDecorationsDatabase();
+    loadWorkbenchDatabase();
+    loadFurnitureDatabase();
+    loadSpecialDatabase();
+
+    // Fetch visit counts and display
+    // try { fetchVisitCounts(); } catch (e) { console.error(e); }
+    
+    // Setup tab switching for right panel
+    setupRightPanelTabs();
+    
+    // Setup collapsible sections
+    setupCollapsibleSections();
+    
+    // Initial cleanup
+    setTimeout(cleanupGridState, 500);
+    
+    // Setup file input handler for loading grids
+    const fileInput = document.getElementById('gridFileInput');
+    if (fileInput) {
+        fileInput.addEventListener('change', handleGridFileLoad);
+    }
+    
+    // Keyboard shortcut: ESC to cancel selection
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && selectedItem) {
+            cancelSelection();
+        }
+        // R key to rotate selected item (only if width != height)
+        if ((e.key === 'r' || e.key === 'R') && selectedItem) {
+            if (selectedItem.width !== selectedItem.height) {
+                isRotated = !isRotated;
+                showPlacementInstruction(); // Update instruction text
+                // Trigger hover preview update
+                const hoveredCell = document.querySelector('.grid-cell:hover');
+                if (hoveredCell) {
+                    const x = parseInt(hoveredCell.dataset.x);
+                    const y = parseInt(hoveredCell.dataset.y);
+                    handleGridHover(null, hoveredCell, x, y);
+                }
+            }
+        }
+    });
+    
+    // Right-click to cancel selection
+    document.addEventListener('contextmenu', (e) => {
+        if (selectedItem) {
+            e.preventDefault();
+            cancelSelection();
+        }
+    });
+});
+
+// Clean up ghost element on mouse up
+document.addEventListener('mouseup', () => {
+    if (ghostElement) {
+        ghostElement.remove();
+        ghostElement = null;
+        document.removeEventListener('mousemove', updateGhostPosition);
+    }
+});

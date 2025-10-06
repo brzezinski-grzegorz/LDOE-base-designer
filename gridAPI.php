@@ -1,26 +1,20 @@
 <?php
-// Database connection parameters
-$servername = "localhost";
-$username = "root";
-$password = "";
-$dbname = "base_designer";
+// Use centralized DB connection
+require_once __DIR__ . '/dbcon.php';
 
 // Enable error reporting for debugging
 error_reporting(E_ALL);
-ini_set('display_errors', 0); // Don't display errors in output
+ini_set('display_errors', 0);
 ini_set('log_errors', 1);
 
-// Create connection
-$conn = new mysqli($servername, $username, $password, $dbname);
-
-// Check connection
-if ($conn->connect_error) {
+// Ensure DB selected
+if (empty($db_selected) || !$db_selected) {
     header('Content-Type: application/json');
-    echo json_encode(['success' => false, 'error' => 'Connection failed: ' . $conn->connect_error]);
+    echo json_encode(['success' => false, 'error' => 'Database not initialized. Please run setup.']);
     exit;
 }
 
-// Set header for JSON response
+// $conn already opened by dbcon.php
 header('Content-Type: application/json');
 
 // Get the request method

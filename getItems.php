@@ -6,25 +6,12 @@ ini_set('display_errors', 0);
 // Set header for JSON response FIRST (before any output)
 header('Content-Type: application/json');
 
-// Database connection parameters
-$servername = "localhost";
-$username = "root";
-$password = "";
-$dbname = "base_designer";
+// Use centralized DB connection
+require_once __DIR__ . '/dbcon.php';
 
-// Create connection
-$conn = new mysqli($servername, $username, $password, $dbname);
-
-// Check connection
-if ($conn->connect_error) {
-    echo json_encode(['error' => 'Connection failed', 'message' => $conn->connect_error]);
-    exit;
-}
-
-// Check if database exists
-$result = $conn->select_db($dbname);
-if (!$result) {
-    echo json_encode(['error' => 'Database does not exist', 'message' => 'Please run setup_database.php first']);
+// Ensure database is selected
+if (empty($db_selected) || !$db_selected) {
+    echo json_encode(['error' => 'Database not ready', 'message' => 'Please run setup or check DB config.']);
     exit;
 }
 
