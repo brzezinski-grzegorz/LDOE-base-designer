@@ -1,14 +1,17 @@
 # LDOE Base Designer
 
-Design and share Last Day on Earth base layouts in your browser. This repository contains the PHP backend, database seeding scripts, and static assets that power the interactive designer.
+<img width="1920" height="1080" alt="LDoE Layout Designer" src="https://github.com/user-attachments/assets/9f983cb2-cf73-4a35-a8d4-429a11c8b52e" />
+
+Simple application to help Last Day on Earth players manage their base layout.
 
 ## Features
 
-- Interactive base designer (`index.html`) with drag-and-drop tiles, furniture, storage, and decorations.
+Most important is easy-to-use interface, saving to .json files and loading.
+
+- Interactive base designer (`index.html`) with tiles, furniture, storage, and decorations.
 - REST endpoints (`getItems.php`, `gridAPI.php`) backed by MySQL for fetching catalog data and saving grids.
 - One-click database bootstrap with optional production seed data via `setup_database.php`.
 - Upload-friendly admin panel (`admin.php`) for managing catalog items, including image uploads to `uploads/`.
-- Emoji-aware UI with utf8mb4 charset, ready for hosting on any PHP-capable server.
 
 ## Requirements
 
