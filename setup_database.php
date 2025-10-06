@@ -163,7 +163,7 @@ if ($seedRequested) {
 
     // Production tiles data
     $tiles = [
-        ['id' => '1', 'name' => 'Grass', 'image' => '🌿', 'width' => '1', 'height' => '1', 'color' => '#2bff00'],
+        ['id' => '1', 'name' => 'Grass', 'image' => 'uploads/9f367b38c44cacb8.png', 'width' => '1', 'height' => '1', 'color' => '#2bff00'],
         ['id' => '6', 'name' => 'Wooden Floor', 'image' => 'uploads/8a474bb4d0f4f63f.png', 'width' => '1', 'height' => '1', 'color' => '#bcbf08'],
         ['id' => '7', 'name' => 'Boarded Floor', 'image' => 'uploads/8f11cf6ca4986874.png', 'width' => '1', 'height' => '1', 'color' => '#ffea00'],
         ['id' => '8', 'name' => 'Stone Floor', 'image' => 'uploads/9bac15915930b65b.png', 'width' => '1', 'height' => '1', 'color' => '#CCCCCC'],
